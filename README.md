@@ -31,12 +31,19 @@ $$TF\text{-}IDF(t,\ d,\ D) = TF(t,\ d) \times IDF(t,\ D)$$
 
 </details>
 
-### Neural Network
+### Neural Network Architecture
 
 The neural network is made up of 3 layers. 
 Layer 1: converts TF-IDF vectors to 256 dimensional vectors
 The converted 256 dimensional vectors are multiplied by weights then added together. The weights start as random and then slowly adjust as the model is trained.
 The result of the first layer are fed into a [ReLU](#relu-rectified-linear-unit) function.
+Afterwards, dropout is applied to the neural network, which randomly excludes 30% of neurons. This prevents the model from overfitting and reduces over reliance on certain neurons.
+
+Layer 2: same as layer 1 but converting 256 dimensional vectors to 64 dimensional vectors.
+
+Layer 3: same as layer 1 and 2 but converting 64 dimensional vectors to 1 dimensional vectors.
+
+The final number is fed into a Sigmoid function, which turns the number into a probability between 0 and 1. We use the sigmoid function because it converts the numbers into a probability between 0 and 1. Where 0 is least likely to be a scam and 1 is most likely to be a scam.
 
 <details>
 <summary><strong>ReLU (Rectified Linear Unit)</strong></summary>
@@ -52,4 +59,6 @@ For any input below 0, the output is 0. For any input above 0, the output equals
 **Source:** GeeksforGeeks — [ReLU Activation Function in Deep Learning](https://www.geeksforgeeks.org/deep-learning/relu-activation-function-in-deep-learning/)
 
 </details>
+
+## Training Process
 
