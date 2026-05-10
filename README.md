@@ -1,10 +1,10 @@
 # Scam Email Filter
 
-## Machine Learning
+## Machine Learning Pipeline
 
 The machine learning model is a neural network created using the pytorch framework. The model is trained on a dataset of scam and legit emails.
 
-### Dataset Conversions
+### Dataset Preparation
 
 The email features (content) is converted into [TF-IDF](#tf-idf-term-frequency-inverse-document-frequency) numerical representations, and then is converted into tensors.
 
@@ -62,3 +62,24 @@ For any input below 0, the output is 0. For any input above 0, the output equals
 
 ## Training Process
 
+The hyperparameters are set to the following values:
+- Epochs: 10
+- Batch size: 64
+- Learning rate: 0.001
+- Max features: 10,000 - how many words the model will track
+
+The data set is split into 3 sets: train, validation, and test. This prevents the model from memorising the dataset. 
+
+The loss function is Binary Cross Entropy Loss. This measures the difference between the predicted probability and the actual label. A loss of 0 means the model is perfect. A higher loss means the model is wrong. Then backpropogation occurs, where weights are adjusted to reduce loss. 
+
+Adam optimiser is used to update the weights, we use adam since our model does not need much tuning and adam is able to quickly adjust to the loss.
+
+The outputs are saved to vectorized.pkl for the vocabulary vectorizer and model.pt for the trained model.
+
+## Evaluation
+We use new data sets that the model has not seen before to evaluate its performance. These data sets are not used in the training, validation, or test sets. The model gets scored on three main metrics:
+- Precision: Measures the proportion of positive identifications that were actually correct. High precision means the model rarely flags legitimate emails as scams.
+- Recall: Measures the proportion of actual positives that were correctly identified. High recall means the model catches most of the actual scams.
+- F1 score: The harmonic mean of precision and recall, providing a single score that balances both.
+
+The f1 score of the model currently sits at 0.9655.

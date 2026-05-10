@@ -18,6 +18,8 @@ import torch.nn as nn
 #   - Tracking of all learnable weights (so the optimizer can update them)
 #   - Easy saving and loading with torch.save / torch.load
 #   - A train() / eval() toggle for training vs. inference behaviour
+
+#we are creating own neural network with the help of pytorch framework
 class ScamClassifier(nn.Module):
     def __init__(self, input_dim: int):
         """
@@ -33,6 +35,8 @@ class ScamClassifier(nn.Module):
         # Imagine 256 neurons, each receiving every TF-IDF feature as input.
         # Each neuron multiplies all inputs by its own weights and sums the result.
         # The layer's weights are a grid of (input_dim × 256) numbers — learned during training.
+
+        #converts the TF-IDF vector to a 256 dimensional vector. The inital vector patterns gets turned into 256 dimensional patterns. The 256 patterns are multiplied by weights, then added together. The weights start as random and then slowly adjust as the model is trained.
         self.fc1 = nn.Linear(input_dim, 256)
 
         # ── ReLU activation ───────────────────────────────────────────────────
@@ -43,6 +47,9 @@ class ScamClassifier(nn.Module):
         # layers would be mathematically identical to having just one layer —
         # they'd all collapse into a single linear transformation.
         # ReLU breaks that and allows the network to learn curved, complex patterns.
+
+        #turns all negative numbers into 0, or lets them be. f(x) = max(0,x)
+        
         self.relu = nn.ReLU()
 
         # ── Dropout ───────────────────────────────────────────────────────────

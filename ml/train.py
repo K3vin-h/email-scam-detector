@@ -53,10 +53,10 @@ def load_and_split(csv_path: Path):
     df = pd.read_csv(csv_path).dropna(subset=["text"])
     df = df[df["text"].str.strip() != ""]
 
-    X = df["text"].tolist()
-    y = df["label"].values
+    X = df["text"].tolist() # email features (content)
+    y = df["label"].values # email labels (1 for scam and 0 for not scam)
 
-    # stratify=y ensures each split has the same spam/ham ratio as the full dataset.
+    # stratify=y ensures each split has the same spam/legit ratio as the full dataset.
     # random_state=42 makes the split reproducible — same split every run.
     X_train, X_rest, y_train, y_rest = train_test_split(
         X, y, test_size=0.30, random_state=42, stratify=y

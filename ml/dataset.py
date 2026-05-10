@@ -35,6 +35,8 @@ class SpamDataset(Dataset):
         # dtype=torch.float32 means each number is stored as a 32-bit float.
         # Neural networks work in float32 by convention — it's precise enough
         # and fast to compute.
+
+        #the email features are converted to tensors via TF-IDF. TF is term frequency which is number of times term t appears in document d/ total terms in document d. IDF is the natural log of the total number of documents / number of documents containing term t.
         self.X = torch.tensor(features, dtype=torch.float32)
 
         # ── Why unsqueeze(-1)? ────────────────────────────────────────────────
@@ -42,6 +44,8 @@ class SpamDataset(Dataset):
         # But our model outputs one number PER email in shape (N, 1).
         # They need to match for the loss function to compare them.
         # unsqueeze(-1) adds a dimension at the end: (N,) → (N, 1).
+        
+        #since the label is either 0, 1 it doesnt fit the Neural Network requirements of a 2D array as seen with tensors X, hence we have to add a dimension. We add the dimension at the end because our model outputs one number per email, (total number of emails, email #1), (total number of emails, email #2), etc.
         self.y = torch.tensor(labels, dtype=torch.float32).unsqueeze(-1)
 
     def __len__(self):
