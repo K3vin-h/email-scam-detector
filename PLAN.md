@@ -152,6 +152,16 @@ frontend/                  # React app (Vite + Tailwind)
 > **Phases 1–3 are fully standalone Python — no Django, no React, no Gmail.**
 > Complete and verify each phase before moving on.
 
+> **After completing each phase:** write a detailed phase report directly below that phase's section. The report is written for a complete beginner who knows basic Python but nothing about software engineering or ML. It must include:
+> - **What was built** — every file created or modified, what it does, and why it exists
+> - **How the files connect** — explain the data/call flow between files in plain English
+> - **Key concepts explained** — define every non-obvious concept introduced (e.g. what is a vectorizer? what is a Django app? what is a REST API?)
+> - **Why each design decision was made** — don't just say what the code does, explain *why* it was written that way
+> - **Current state of the project** — what can run right now, what can't, what comes next
+> - **Any deviations from the original plan** — what changed and why
+>
+> Update `CLAUDE.md` if any architectural facts changed.
+
 ### Phase 1 — Data Download (`ml/download_data.py`)
 
 Standalone script (no Django needed yet):
