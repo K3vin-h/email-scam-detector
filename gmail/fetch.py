@@ -90,11 +90,25 @@ def get_email(email_id: str) -> dict:
 class _HTMLTextExtractor(HTMLParser):
     """Collect readable text from HTML email bodies."""
 
+    _IGNORED_TAGS = {"script", "style"}
+
     def __init__(self) -> None:
         super().__init__()
         self._chunks: list[str] = []
+        self._ignored_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() in self._IGNORED_TAGS:
+            self._ignored_depth += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() in self._IGNORED_TAGS and self._ignored_depth:
+            self._ignored_depth -= 1
 
     def handle_data(self, data: str) -> None:
+        if self._ignored_depth:
+            return
+
         text = data.strip()
         if text:
             self._chunks.append(text)
@@ -131,7 +145,7 @@ def _extract_body_by_mime(
     mime_type: str,
 ) -> str:
     """Find and decode the first body part matching the requested MIME type."""
-    if payload.get("mimeType") == mime_type:
+    if payload.get("mimeType") == mime_type and not _is_attachment(payload):
         return _decode_part_body(payload, service, email_id)
 
     for part in payload.get("parts", []):
@@ -140,6 +154,18 @@ def _extract_body_by_mime(
             return result
 
     return ""
+
+
+def _is_attachment(payload: dict) -> bool:
+    """Return True when this payload part is an attachment, not message body text."""
+    if payload.get("filename"):
+        return True
+
+    headers = {
+        header.get("name", "").lower(): header.get("value", "").lower()
+        for header in payload.get("headers", [])
+    }
+    return "attachment" in headers.get("content-disposition", "")
 
 
 def _decode_part_body(payload: dict, service: Any, email_id: str) -> str:
