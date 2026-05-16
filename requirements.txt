@@ -10,3 +10,8 @@ django>=6.0.0
 djangorestframework>=3.17.0
 django-cors-headers>=4.9.0
 python-decouple>=3.8
+
+# Gmail
+google-api-python-client>=2.100.0
+google-auth-oauthlib>=1.0.0
+google-auth-httplib2>=0.2.0

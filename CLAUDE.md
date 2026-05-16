@@ -29,7 +29,7 @@ ruff check .
 
 The project is a local macOS app that classifies Gmail emails as scam or legitimate using a PyTorch neural network trained from scratch. See `PLAN.md` for the full 10-phase roadmap.
 
-**Current state:** Phases 1–3 complete (ML pipeline, F1 = 0.97). Phase 4+ (Django, Gmail, React) not yet implemented.
+**Current state:** Phases 1–5 complete (ML pipeline F1 = 0.97, Django scaffold + REST API, Gmail OAuth + fetch + labels). Phase 6+ (React frontend) not yet implemented.
 
 ### ML Pipeline (`ml/`)
 
@@ -47,12 +47,12 @@ download_data.py  →  emails.csv  →  train.py  →  model.pt + vectorizer.pkl
 - `train.py` — fits `TfidfVectorizer(max_features=10_000)` on train split only, saves best checkpoint by val loss; hyperparameters (EPOCHS, BATCH_SIZE, LEARNING_RATE, MAX_FEATURES) are constants at the top of the file
 - `predict.py` — `predict(text) → (is_scam: bool, confidence: float)`; loads model + vectorizer from disk on each CLI call (Django will load once at startup)
 
-### Planned Web Layer
+### Web Layer
 
-- `core/` — Django project package (settings, urls, wsgi)
-- `dashboard/` — Django app (models: EmailRecord, ScanSettings, SummaryReport; DRF ViewSets)
-- `gmail/` — OAuth2 flow, email fetch, label application
-- `frontend/` — React 18 + Vite + Tailwind (port 5173); Django REST API on port 8000
+- `core/` — Django project package (settings, urls, wsgi) ✓
+- `dashboard/` — Django app (models: EmailRecord, ScanSettings, SummaryReport; DRF ViewSets) ✓
+- `gmail/` — OAuth2 flow with CSRF state protection (`auth.py`); email fetch with plain-text + HTML fallback and attachment handling (`fetch.py`); label create/apply (`labels.py`); token saved to `token.json` (gitignored) ✓
+- `frontend/` — React 18 + Vite + Tailwind (port 5173); Django REST API on port 8000 (Phase 6 — not yet implemented)
 
 ### Key Constraints
 

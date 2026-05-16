@@ -18,6 +18,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "corsheaders",
     "dashboard",
+    "gmail",
 ]
 
 # CorsMiddleware must come before CommonMiddleware
@@ -99,4 +100,5 @@ CORS_ALLOWED_ORIGINS = config(
 # Gmail OAuth — credentials live in .env, token stored locally at runtime
 GMAIL_CLIENT_ID = config("GMAIL_CLIENT_ID", default="")
 GMAIL_CLIENT_SECRET = config("GMAIL_CLIENT_SECRET", default="")
+GMAIL_REDIRECT_URI = config("GMAIL_REDIRECT_URI", default="http://localhost:8000/auth/callback/")
 GMAIL_TOKEN_PATH = BASE_DIR / "token.json"
