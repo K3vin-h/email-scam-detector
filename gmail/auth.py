@@ -85,6 +85,12 @@ def _build_flow(state: str | None = None, code_verifier: str | None = None) -> F
     Create an OAuth flow using credentials from settings (pulled from .env).
     We pass the client ID/secret directly instead of using a credentials.json file.
     """
+    if not settings.GMAIL_CLIENT_ID or not settings.GMAIL_CLIENT_SECRET:
+        raise RuntimeError(
+            "Gmail OAuth is not configured. Set GMAIL_CLIENT_ID and "
+            "GMAIL_CLIENT_SECRET in .env."
+        )
+
     client_config = {
         "web": {
             "client_id": settings.GMAIL_CLIENT_ID,
@@ -111,9 +117,13 @@ def _write_token_file(token_path: Path, token_json: str) -> None:
     os.chmod(token_path, 0o600)
 
 
-def start_oauth(request: HttpRequest) -> HttpResponseRedirect:
+def start_oauth(request: HttpRequest) -> HttpResponse | HttpResponseRedirect:
     """Django view: send the user to Google's consent screen to approve access."""
-    flow = _build_flow()
+    try:
+        flow = _build_flow()
+    except RuntimeError as e:
+        return HttpResponse(str(e), status=500)
+
     # access_type="offline" ensures Google gives us a refresh token.
     # prompt="consent" forces the consent screen even if the user approved before.
     auth_url, state = flow.authorization_url(
