@@ -51,7 +51,7 @@ download_data.py  →  emails.csv  →  train.py  →  model.pt + vectorizer.pkl
 
 - `core/` — Django project package (settings, urls, wsgi) ✓
 - `dashboard/` — Django app (models: EmailRecord, ScanSettings, SummaryReport; DRF ViewSets) ✓
-- `gmail/` — OAuth2 flow (`auth.py`), email fetch (`fetch.py`), label apply (`labels.py`); token saved to `token.json` (gitignored) ✓
+- `gmail/` — OAuth2 flow with CSRF state protection (`auth.py`); email fetch with plain-text + HTML fallback and attachment handling (`fetch.py`); label create/apply (`labels.py`); token saved to `token.json` (gitignored) ✓
 - `frontend/` — React 18 + Vite + Tailwind (port 5173); Django REST API on port 8000 (Phase 6 — not yet implemented)
 
 ### Key Constraints
