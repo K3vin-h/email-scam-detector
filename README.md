@@ -92,3 +92,30 @@ Django is used for backend for this project, the uses consist of:
 2. Views: handles the REST API calls from the front end, such as getting the email contents or applying a label
 3. URLs: delegates requests to the correct view
 
+
+### OAuth
+
+The app uses OAuth to access the user's Gmail account. This allows the user to grant the app permission to access their emails without giving away their Gmail password.
+
+When the user connects their Gmail account, the app redirects them to the Google permission screen to allow access to their emails. Then Google redirects the user back to
+the app with a temporary authorization code. The backend exchanges this temporary code for an access token and a refresh token.
+
+The access token is used to access the user's email. The refresh token is used to get new access tokens when the current access token expires. The refresh and access
+tokens are stored locally in `token.json`.
+
+### App Scopes
+
+- `https://www.googleapis.com/auth/gmail.readonly`: Allows the app to read the user's emails.
+- `https://www.googleapis.com/auth/gmail.labels`: Allows the app to read and manage Gmail labels.
+- `https://www.googleapis.com/auth/gmail.modify`: Allows the app to modify Gmail messages, such as applying labels.
+
+### Callback Routes
+
+1. `/auth/gmail/`: Starts the OAuth login flow and redirects the user to Google.
+2. `/auth/callback/`: Receives the response from Google after the user approves access, exchanges the authorization code for tokens, and saves them in `token.json`.
+
+### Redirect URL
+
+The redirect URL is:
+
+`http://localhost:8000/auth/callback/`

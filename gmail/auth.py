@@ -70,7 +70,7 @@ def get_service() -> Any:
     return build("gmail", "v1", credentials=creds)
 
 
-def _build_flow() -> Flow:
+def _build_flow(state: str | None = None, code_verifier: str | None = None) -> Flow:
     """
     Create an OAuth flow using credentials from settings (pulled from .env).
     We pass the client ID/secret directly instead of using a credentials.json file.
@@ -88,6 +88,8 @@ def _build_flow() -> Flow:
         client_config,
         scopes=SCOPES,
         redirect_uri=settings.GMAIL_REDIRECT_URI,
+        state=state,
+        code_verifier=code_verifier,
     )
 
 
@@ -105,6 +107,7 @@ def start_oauth(request: HttpRequest) -> HttpResponseRedirect:
     # This prevents CSRF attacks where an attacker tricks the server into
     # accepting a malicious auth code by forging the callback URL.
     request.session["oauth_state"] = state
+    request.session["oauth_code_verifier"] = flow.code_verifier
     return HttpResponseRedirect(auth_url)
 
 
@@ -120,14 +123,20 @@ def oauth_callback(request: HttpRequest) -> HttpResponse:
         return HttpResponse("Missing authorization code.", status=400)
 
     # Verify state matches what we stored in the session — rejects forged callbacks.
-    if state != request.session.get("oauth_state"):
+    saved_state = request.session.get("oauth_state")
+    code_verifier = request.session.get("oauth_code_verifier")
+
+    if state != saved_state:
         return HttpResponse("Invalid state parameter.", status=400)
 
-    flow = _build_flow()
+    flow = _build_flow(state=saved_state, code_verifier=code_verifier)
     try:
         flow.fetch_token(code=code)
     except Exception as e:
         return HttpResponse(f"Token exchange failed: {e}", status=400)
+
+    request.session.pop("oauth_state", None)
+    request.session.pop("oauth_code_verifier", None)
 
     token_path = Path(settings.GMAIL_TOKEN_PATH)
     try:
