@@ -106,6 +106,7 @@ def _build_flow(state: str | None = None, code_verifier: str | None = None) -> F
         redirect_uri=settings.GMAIL_REDIRECT_URI,
         state=state,
         code_verifier=code_verifier,
+        autogenerate_code_verifier=True,
     )
 
 
