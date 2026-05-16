@@ -13,6 +13,8 @@ Access tokens expire after ~1 hour. The refresh token lets us get a new
 access token automatically without making the user log in again.
 """
 
+import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +33,8 @@ SCOPES = [
     "https://www.googleapis.com/auth/gmail.modify",
 ]
 
+logger = logging.getLogger(__name__)
+
 
 def get_credentials() -> Credentials | None:
     """
@@ -43,6 +47,12 @@ def get_credentials() -> Credentials | None:
         return None
 
     try:
+        os.chmod(token_path, 0o600)
+    except OSError:
+        logger.exception("Failed to secure Gmail OAuth token file")
+        return None
+
+    try:
         creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
     except Exception:
         # token.json is corrupted or in an unreadable format — treat as not connected.
@@ -51,7 +61,7 @@ def get_credentials() -> Credentials | None:
     if creds.expired and creds.refresh_token:
         try:
             creds.refresh(Request())
-            token_path.write_text(creds.to_json())
+            _write_token_file(token_path, creds.to_json())
         except Exception:
             # Refresh failed — token may have been revoked by the user.
             return None
@@ -93,6 +103,14 @@ def _build_flow(state: str | None = None, code_verifier: str | None = None) -> F
     )
 
 
+def _write_token_file(token_path: Path, token_json: str) -> None:
+    """Write OAuth tokens so only the local OS user can read them."""
+    fd = os.open(token_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as token_file:
+        token_file.write(token_json)
+    os.chmod(token_path, 0o600)
+
+
 def start_oauth(request: HttpRequest) -> HttpResponseRedirect:
     """Django view: send the user to Google's consent screen to approve access."""
     flow = _build_flow()
@@ -126,23 +144,28 @@ def oauth_callback(request: HttpRequest) -> HttpResponse:
     saved_state = request.session.get("oauth_state")
     code_verifier = request.session.get("oauth_code_verifier")
 
-    if state != saved_state:
+    if not saved_state or not state or state != saved_state:
         return HttpResponse("Invalid state parameter.", status=400)
+
+    if not code_verifier:
+        return HttpResponse("Missing OAuth verifier.", status=400)
 
     flow = _build_flow(state=saved_state, code_verifier=code_verifier)
     try:
         flow.fetch_token(code=code)
-    except Exception as e:
-        return HttpResponse(f"Token exchange failed: {e}", status=400)
+    except Exception:
+        logger.exception("Gmail OAuth token exchange failed")
+        return HttpResponse("Failed to connect Gmail. Please try again.", status=400)
 
     request.session.pop("oauth_state", None)
     request.session.pop("oauth_code_verifier", None)
 
     token_path = Path(settings.GMAIL_TOKEN_PATH)
     try:
-        token_path.write_text(flow.credentials.to_json())
-    except OSError as e:
-        return HttpResponse(f"Failed to save credentials: {e}", status=500)
+        _write_token_file(token_path, flow.credentials.to_json())
+    except OSError:
+        logger.exception("Failed to save Gmail OAuth credentials")
+        return HttpResponse("Failed to save Gmail credentials.", status=500)
 
     # TODO: once the React frontend exists, redirect to http://localhost:5173/settings?connected=true
     return HttpResponse("Gmail connected. You may close this tab.")
