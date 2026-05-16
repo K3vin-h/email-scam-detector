@@ -83,3 +83,12 @@ We use new data sets that the model has not seen before to evaluate its performa
 - F1 score: The harmonic mean of precision and recall, providing a single score that balances both.
 
 The f1 score of the model currently sits at 0.9655.
+
+
+## Backend
+
+Django is used for backend for this project, the uses consist of:
+1. Models: defines the data models for where to store and retrieve data such as the emails, labels, and login credentials.
+2. Views: handles the REST API calls from the front end, such as getting the email contents or applying a label
+3. URLs: delegates requests to the correct view
+
