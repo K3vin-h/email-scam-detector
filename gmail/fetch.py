@@ -13,6 +13,7 @@ We walk the tree recursively to find the plain-text part.
 """
 
 import base64
+from datetime import datetime, timezone as dt_timezone
 from html.parser import HTMLParser
 from typing import Any
 
@@ -78,12 +79,17 @@ def get_email(email_id: str) -> dict:
         for h in detail.get("payload", {}).get("headers", [])
     }
 
+    # internalDate is Unix time in milliseconds — convert to a timezone-aware datetime.
+    internal_ms = int(detail.get("internalDate", 0))
+    received_at = datetime.fromtimestamp(internal_ms / 1000, tz=dt_timezone.utc)
+
     return {
         "id": email_id,
         "subject": headers.get("Subject", "(no subject)"),
         "sender": headers.get("From", ""),
         "snippet": detail.get("snippet", ""),
         "body": _extract_body(detail.get("payload", {}), service, email_id),
+        "received_at": received_at,
     }
 
 
