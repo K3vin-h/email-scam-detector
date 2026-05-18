@@ -23,42 +23,51 @@ from gmail.auth import get_service
 _MAX_RESULTS_LIMIT = 50
 
 
-def list_emails(max_results: int = 10, query: str | None = None) -> list[dict]:
+def list_emails(max_results: int | None = 10, query: str | None = None) -> list[dict]:
     """
     Return recent emails as a list of dicts.
     Each dict contains: id, subject, sender, snippet.
     `snippet` is a short preview of the email body provided by Gmail.
-    `max_results` is capped at 50 to stay within API quota limits.
+    `max_results` is capped at 50 unless set to None, which fetches all pages.
     `query` is passed through to Gmail search, such as after:YYYY/MM/DD.
     """
     service = get_service()
-    max_results = min(max_results, _MAX_RESULTS_LIMIT)
-
-    result = service.users().messages().list(
-        userId="me", maxResults=max_results, q=query
-    ).execute()
-
     emails = []
-    for msg in result.get("messages", []):
-        # format="metadata" fetches only headers (Subject, From), not the full body.
-        # This is faster than fetching the full email for a list view.
-        detail = service.users().messages().get(
+    page_token = None
+
+    while True:
+        page_size = _MAX_RESULTS_LIMIT if max_results is None else min(max_results, _MAX_RESULTS_LIMIT)
+        result = service.users().messages().list(
             userId="me",
-            id=msg["id"],
-            format="metadata",
-            metadataHeaders=["Subject", "From"],
+            maxResults=page_size,
+            q=query,
+            pageToken=page_token,
         ).execute()
 
-        headers = {
-            h["name"]: h["value"]
-            for h in detail.get("payload", {}).get("headers", [])
-        }
-        emails.append({
-            "id": msg["id"],
-            "subject": headers.get("Subject", "(no subject)"),
-            "sender": headers.get("From", ""),
-            "snippet": detail.get("snippet", ""),
-        })
+        for msg in result.get("messages", []):
+            # format="metadata" fetches only headers (Subject, From), not the full body.
+            # This is faster than fetching the full email for a list view.
+            detail = service.users().messages().get(
+                userId="me",
+                id=msg["id"],
+                format="metadata",
+                metadataHeaders=["Subject", "From"],
+            ).execute()
+
+            headers = {
+                h["name"]: h["value"]
+                for h in detail.get("payload", {}).get("headers", [])
+            }
+            emails.append({
+                "id": msg["id"],
+                "subject": headers.get("Subject", "(no subject)"),
+                "sender": headers.get("From", ""),
+                "snippet": detail.get("snippet", ""),
+            })
+
+        page_token = result.get("nextPageToken")
+        if max_results is not None or not page_token:
+            break
 
     return emails
 

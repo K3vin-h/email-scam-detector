@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -7,6 +7,7 @@ from rest_framework.test import APIClient
 
 from dashboard.models import EmailRecord
 from dashboard.scanner import run_scan
+from gmail.fetch import list_emails as gmail_list_emails
 
 
 class FixedDateTime(datetime):
@@ -45,7 +46,7 @@ class RunScanTests(TestCase):
 
         self.assertEqual(result, {"scanned": 1, "new": 1, "scams_found": 1})
         self.assertEqual(EmailRecord.objects.count(), 0)
-        list_emails.assert_called_once_with(max_results=50, query="after:2026/05/11")
+        list_emails.assert_called_once_with(max_results=None, query="after:2026/05/11")
         load_predictor.assert_called_once_with()
         predict.assert_called_once_with("Claim your prize now")
         get_or_create_label.assert_not_called()
@@ -90,7 +91,41 @@ class RunScanTests(TestCase):
     @patch("dashboard.scanner.load_predictor")
     @patch("dashboard.scanner.get_email")
     @patch("dashboard.scanner.list_emails")
-    def test_scan_skips_existing_record_without_labeling(
+    def test_scan_skips_existing_legitimate_record_without_fetching(
+        self,
+        list_emails,
+        get_email,
+        load_predictor,
+        get_or_create_label,
+        apply_label,
+    ):
+        EmailRecord.objects.create(
+            gmail_id="gmail-1",
+            sender="sender@example.com",
+            subject="Already scanned",
+            snippet="Existing snippet",
+            received_at=datetime(2026, 5, 17, tzinfo=timezone.utc),
+            confidence=0.95,
+            is_scam=False,
+            labeled_in_gmail=False,
+        )
+        list_emails.return_value = [{"id": "gmail-1"}]
+
+        result = run_scan()
+
+        self.assertEqual(result, {"scanned": 1, "new": 0, "scams_found": 0})
+        self.assertEqual(EmailRecord.objects.count(), 1)
+        get_email.assert_not_called()
+        load_predictor.assert_not_called()
+        get_or_create_label.assert_not_called()
+        apply_label.assert_not_called()
+
+    @patch("dashboard.scanner.apply_label")
+    @patch("dashboard.scanner.get_or_create_label")
+    @patch("dashboard.scanner.load_predictor")
+    @patch("dashboard.scanner.get_email")
+    @patch("dashboard.scanner.list_emails")
+    def test_scan_retries_label_for_existing_unlabeled_scam(
         self,
         list_emails,
         get_email,
@@ -109,15 +144,17 @@ class RunScanTests(TestCase):
             labeled_in_gmail=False,
         )
         list_emails.return_value = [{"id": "gmail-1"}]
+        get_or_create_label.return_value = "Label_123"
 
         result = run_scan()
 
         self.assertEqual(result, {"scanned": 1, "new": 0, "scams_found": 0})
-        self.assertEqual(EmailRecord.objects.count(), 1)
+        record = EmailRecord.objects.get(gmail_id="gmail-1")
+        self.assertTrue(record.labeled_in_gmail)
         get_email.assert_not_called()
         load_predictor.assert_not_called()
-        get_or_create_label.assert_not_called()
-        apply_label.assert_not_called()
+        get_or_create_label.assert_called_once_with("Scam")
+        apply_label.assert_called_once_with("gmail-1", "Label_123")
 
     @patch("dashboard.scanner.apply_label")
     @patch("dashboard.scanner.get_or_create_label")
@@ -214,4 +251,58 @@ class DashboardAPITests(TestCase):
         self.assertEqual(
             response.json(),
             {"error": "Scan failed. Please try again later."},
+        )
+
+
+class GmailFetchTests(TestCase):
+    def test_list_emails_fetches_all_pages_when_max_results_is_none(self):
+        service = MagicMock()
+        messages = service.users.return_value.messages.return_value
+        messages.list.return_value.execute.side_effect = [
+            {"messages": [{"id": "gmail-1"}], "nextPageToken": "page-2"},
+            {"messages": [{"id": "gmail-2"}]},
+        ]
+        messages.get.return_value.execute.side_effect = [
+            {
+                "payload": {
+                    "headers": [
+                        {"name": "Subject", "value": "First"},
+                        {"name": "From", "value": "first@example.com"},
+                    ]
+                },
+                "snippet": "First snippet",
+            },
+            {
+                "payload": {
+                    "headers": [
+                        {"name": "Subject", "value": "Second"},
+                        {"name": "From", "value": "second@example.com"},
+                    ]
+                },
+                "snippet": "Second snippet",
+            },
+        ]
+
+        with patch("gmail.fetch.get_service", return_value=service):
+            emails = gmail_list_emails(max_results=None, query="after:2026/05/11")
+
+        self.assertEqual([email["id"] for email in emails], ["gmail-1", "gmail-2"])
+        self.assertEqual(messages.list.call_count, 2)
+        self.assertEqual(
+            messages.list.call_args_list[0].kwargs,
+            {
+                "userId": "me",
+                "maxResults": 50,
+                "q": "after:2026/05/11",
+                "pageToken": None,
+            },
+        )
+        self.assertEqual(
+            messages.list.call_args_list[1].kwargs,
+            {
+                "userId": "me",
+                "maxResults": 50,
+                "q": "after:2026/05/11",
+                "pageToken": "page-2",
+            },
         )

@@ -33,12 +33,10 @@ def run_scan(*, dry_run: bool = False) -> dict:
     EmailRecord rows are saved and no Gmail labels are created or applied.
     """
     settings = ScanSettings.load()
-    # Heuristic: fetch ~10 emails per day in the scan window, capped by the API limit.
-    max_results = min(settings.scan_window_days * 10, 50)
     cutoff = datetime.now(tz=dt_timezone.utc) - timedelta(days=settings.scan_window_days)
     gmail_query = f"after:{cutoff:%Y/%m/%d}"
 
-    emails = list_emails(max_results=max_results, query=gmail_query)
+    emails = list_emails(max_results=None, query=gmail_query)
 
     # Resolve the Gmail label ID once — avoids one API call per scam email.
     scam_label_id: str | None = None
@@ -50,7 +48,17 @@ def run_scan(*, dry_run: bool = False) -> dict:
     for meta in emails:
         gmail_id = meta["id"]
 
-        if EmailRecord.objects.filter(gmail_id=gmail_id).exists():
+        existing_record = EmailRecord.objects.filter(gmail_id=gmail_id).first()
+        if existing_record:
+            if existing_record.is_scam and not existing_record.labeled_in_gmail and not dry_run:
+                try:
+                    if scam_label_id is None:
+                        scam_label_id = get_or_create_label(_SCAM_LABEL_NAME)
+                    apply_label(gmail_id, scam_label_id)
+                    existing_record.labeled_in_gmail = True
+                    existing_record.save(update_fields=["labeled_in_gmail"])
+                except Exception:
+                    logger.exception("Failed to apply Gmail label to message %s", gmail_id)
             continue
 
         try:
