@@ -18,6 +18,33 @@ from ml.model import ScamClassifier
 ML_DIR = Path("ml")
 
 
+def load_predictor():
+    """
+    Load model artifacts once and return a callable for repeated predictions.
+
+    This is useful for scan jobs that classify many emails in one run, avoiding
+    repeated model and vectorizer deserialization for each message.
+    """
+    with open(ML_DIR / "vectorizer.pkl", "rb") as f:
+        vectorizer = pickle.load(f)
+
+    input_dim = len(vectorizer.vocabulary_)
+    model = ScamClassifier(input_dim)
+    model.load_state_dict(torch.load(ML_DIR / "model.pt", map_location="cpu", weights_only=True))
+    model.eval()
+
+    def _predict(text: str) -> tuple[bool, float]:
+        features = vectorizer.transform([text]).toarray()
+        x = torch.tensor(features, dtype=torch.float32)
+
+        with torch.no_grad():
+            confidence = model(x).item()
+
+        return confidence >= 0.5, confidence
+
+    return _predict
+
+
 def predict(text: str) -> tuple[bool, float]:
     """
     Classify one email text as scam or legitimate.
@@ -33,31 +60,7 @@ def predict(text: str) -> tuple[bool, float]:
     Note: this loads the model from disk on every call, which is fine for
     CLI testing. The Django app will load it once at startup instead.
     """
-    # ── Load vectorizer ───────────────────────────────────────────────────────
-    # The vectorizer knows the vocabulary learned during training.
-    # We MUST use the same one — a different vocabulary would produce
-    # meaningless numbers and garbage predictions.
-    with open(ML_DIR / "vectorizer.pkl", "rb") as f:
-        vectorizer = pickle.load(f)
-
-    # ── Load model ────────────────────────────────────────────────────────────
-    # Recreate the same architecture, then fill in the trained weights.
-    input_dim = len(vectorizer.vocabulary_)
-    model = ScamClassifier(input_dim)
-    model.load_state_dict(torch.load(ML_DIR / "model.pt", map_location="cpu", weights_only=True))
-    model.eval()  # Disable Dropout for deterministic output
-
-    # ── Convert text → numbers → prediction ──────────────────────────────────
-    # transform() (not fit_transform!) — we apply the existing vocabulary,
-    # we do NOT learn new words from this single email.
-    features = vectorizer.transform([text]).toarray()
-    x = torch.tensor(features, dtype=torch.float32)
-
-    with torch.no_grad():
-        # .item() extracts the single Python float from the 1-element tensor.
-        confidence = model(x).item()
-
-    return confidence >= 0.5, confidence
+    return load_predictor()(text)
 
 
 if __name__ == "__main__":
