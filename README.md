@@ -1,6 +1,6 @@
 # Scam Email Filter
 
-## Machine Learning Pipeline
+## Machine Learning
 
 The machine learning model is a neural network created using the PyTorch framework. The model is trained on a dataset of scam and legitimate emails.
 
@@ -67,7 +67,7 @@ For any input below 0, the output is 0. For any input above 0, the output equals
 
 </details>
 
-## Training Process
+### Training Process
 
 The hyperparameters are set to the following values:
 
@@ -84,7 +84,7 @@ Adam optimizer is used to update the weights. We use Adam because our model does
 
 The outputs are saved to `vectorized.pkl` for the vocabulary vectorizer and `model.pt` for the trained model.
 
-## Evaluation
+### Evaluation
 
 We use new data sets that the model has not seen before to evaluate its performance. These data sets are not used in the training, validation, or test sets. The model gets scored on three main metrics:
 
@@ -110,19 +110,64 @@ When the user connects their Gmail account, the app redirects them to the Google
 
 The access token is used to access the user's email. The refresh token is used to get new access tokens when the current access token expires. The refresh and access tokens are stored locally in `token.json`.
 
-### App Scopes
+#### App Scopes
 
 - `https://www.googleapis.com/auth/gmail.readonly`: Allows the app to read the user's emails.
 - `https://www.googleapis.com/auth/gmail.labels`: Allows the app to read and manage Gmail labels.
 - `https://www.googleapis.com/auth/gmail.modify`: Allows the app to modify Gmail messages, such as applying labels.
 
-### Callback Routes
+#### Callback Routes
 
 1. `/auth/gmail/`: Starts the OAuth login flow and redirects the user to Google.
 2. `/auth/callback/`: Receives the response from Google after the user approves access, exchanges the authorization code for tokens, and saves them in `token.json`.
 
-### Redirect URL
+#### Redirect URL
 
 The redirect URL is:
 
 `http://localhost:8000/auth/callback/`
+
+### Models
+
+The models are stored in a local SQLite database. The database schema is defined in `dashboard/models.py`.
+
+#### Email Record
+
+Stores the result of scanning one Gmail message through the ML model.
+
+- `id`: The id of the email
+- `subject`: Email subject
+- `sender`: User that sent the email
+- `snippet`: Snippet of the email content
+- `received_at`: Time email was received in the user's inbox
+- `confidence`: Confidence level of the model; 1 being most likely to be a scam and 0 being least likely to be a scam
+- `is_scam`: Whether the email is a scam (T/F)
+- `labeled_in_gmail`: Whether the email contains the scam tag (T/F)
+- `scanned_at`: Time when the email was scanned by our system
+
+#### Scan Settings
+
+Stores the global settings for the app.
+
+- `scan_window_days`: How many days back to scan for emails
+- `scan_frequency_hours`: How many hours to wait between scans
+- `notify_frequency`: How often to send email summaries
+- `notify_via_email`: Whether to send email summaries
+- `notify_email_address`: Email address to send summaries to
+
+#### Summary Report
+
+Stores the results of a single summary report.
+
+- `period`: Daily, weekly, or monthly
+- `generated_at`: When the report was generated
+- `total_scams`: Number of scams found during the given time period
+- `top_senders`: List of top senders during the given time period
+
+### API Endpoints
+
+GET /api/emails/: Returns all scanned emails; /api/emails?is_scam=true returns only scams.
+GET /api/settings/: Returns current settings.
+PATCH /api/settings/: Updates the certain setting. fields in the request body
+GET /api/reports/: Returns all reports; /api/reports?period=daily returns only daily reports.
+POST /api/scan/: Triggers an on-demand scan of the user's inbox, and returns the number of scanned emails, new emails scanned, and scams found.
