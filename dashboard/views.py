@@ -1,9 +1,11 @@
+import logging
 from datetime import timedelta
 
 from django.db.models import Count
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.generics import ListAPIView
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -14,6 +16,8 @@ from dashboard.serializers import (
     SummaryReportSerializer,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class HealthView(APIView):
     def get(self, request):
@@ -23,6 +27,7 @@ class HealthView(APIView):
 class EmailListView(ListAPIView):
     """GET /api/emails/?is_scam=true — paginated email scan results."""
 
+    permission_classes = [IsAuthenticated]
     serializer_class = EmailRecordSerializer
 
     def get_queryset(self):
@@ -35,6 +40,8 @@ class EmailListView(ListAPIView):
 
 class ScanSettingsView(APIView):
     """GET/PATCH /api/settings/ — read or partially update the singleton settings row."""
+
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         settings = ScanSettings.load()
@@ -51,6 +58,7 @@ class ScanSettingsView(APIView):
 class SummaryReportListView(ListAPIView):
     """GET /api/reports/?period=daily|weekly|monthly — paginated report list."""
 
+    permission_classes = [IsAuthenticated]
     serializer_class = SummaryReportSerializer
 
     def get_queryset(self):
@@ -63,6 +71,8 @@ class SummaryReportListView(ListAPIView):
 
 class StatsView(APIView):
     """GET /api/stats/ — aggregate counts for dashboard charts."""
+
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         now = timezone.now()
@@ -94,14 +104,17 @@ class StatsView(APIView):
 class ScanView(APIView):
     """POST /api/scan/ — trigger an on-demand Gmail scan synchronously."""
 
+    permission_classes = [IsAuthenticated]
+
     def post(self, request):
         from dashboard.scanner import run_scan
 
         try:
             result = run_scan()
             return Response(result)
-        except Exception as exc:
+        except Exception:
+            logger.exception("Failed to run Gmail scan")
             return Response(
-                {"error": str(exc)},
+                {"error": "Scan failed. Please try again later."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )

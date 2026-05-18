@@ -1,7 +1,9 @@
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
+from django.contrib.auth import get_user_model
 from django.test import TestCase
+from rest_framework.test import APIClient
 
 from dashboard.models import EmailRecord
 from dashboard.scanner import run_scan
@@ -174,3 +176,42 @@ class RunScanTests(TestCase):
         self.assertEqual(result, {"scanned": 1, "new": 0, "scams_found": 0})
         self.assertEqual(EmailRecord.objects.count(), 0)
         load_predictor.assert_not_called()
+
+
+class DashboardAPITests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = get_user_model().objects.create_user(
+            username="tester",
+            password="password",
+        )
+
+    def test_sensitive_dashboard_apis_require_authentication(self):
+        endpoints = [
+            ("get", "/api/emails/"),
+            ("get", "/api/stats/"),
+            ("get", "/api/settings/"),
+            ("patch", "/api/settings/"),
+            ("get", "/api/reports/"),
+            ("post", "/api/scan/"),
+        ]
+
+        for method, path in endpoints:
+            response = getattr(self.client, method)(path, {}, format="json")
+
+            self.assertIn(response.status_code, (401, 403), path)
+
+    def test_scan_failure_returns_generic_error_to_authenticated_user(self):
+        self.client.force_authenticate(user=self.user)
+
+        with (
+            self.assertLogs("dashboard.views", level="ERROR"),
+            patch("dashboard.scanner.run_scan", side_effect=RuntimeError("secret details")),
+        ):
+            response = self.client.post("/api/scan/")
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(
+            response.json(),
+            {"error": "Scan failed. Please try again later."},
+        )
