@@ -8,12 +8,12 @@ Kept in its own module so it can be called from three places without duplication
 """
 
 import logging
-from datetime import datetime, timezone as dt_timezone
+from datetime import datetime, timedelta, timezone as dt_timezone
 
 from dashboard.models import EmailRecord, ScanSettings
 from gmail.fetch import get_email, list_emails
 from gmail.labels import apply_label, get_or_create_label
-from ml.predict import predict
+from ml.predict import load_predictor
 
 logger = logging.getLogger(__name__)
 
@@ -35,11 +35,14 @@ def run_scan(*, dry_run: bool = False) -> dict:
     settings = ScanSettings.load()
     # Heuristic: fetch ~10 emails per day in the scan window, capped by the API limit.
     max_results = min(settings.scan_window_days * 10, 50)
+    cutoff = datetime.now(tz=dt_timezone.utc) - timedelta(days=settings.scan_window_days)
+    gmail_query = f"after:{cutoff:%Y/%m/%d}"
 
-    emails = list_emails(max_results=max_results)
+    emails = list_emails(max_results=max_results, query=gmail_query)
 
     # Resolve the Gmail label ID once — avoids one API call per scam email.
     scam_label_id: str | None = None
+    predict_email = None
 
     new_count = 0
     scams_found = 0
@@ -57,9 +60,13 @@ def run_scan(*, dry_run: bool = False) -> dict:
             continue
 
         text = email.get("body") or email.get("snippet", "")
-        is_scam, confidence = predict(text)
-
         received_at = email.get("received_at") or datetime.now(tz=dt_timezone.utc)
+        if received_at < cutoff:
+            continue
+
+        if predict_email is None:
+            predict_email = load_predictor()
+        is_scam, confidence = predict_email(text)
 
         if dry_run:
             new_count += 1

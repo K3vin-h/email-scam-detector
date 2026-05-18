@@ -23,18 +23,19 @@ from gmail.auth import get_service
 _MAX_RESULTS_LIMIT = 50
 
 
-def list_emails(max_results: int = 10) -> list[dict]:
+def list_emails(max_results: int = 10, query: str | None = None) -> list[dict]:
     """
     Return recent emails as a list of dicts.
     Each dict contains: id, subject, sender, snippet.
     `snippet` is a short preview of the email body provided by Gmail.
     `max_results` is capped at 50 to stay within API quota limits.
+    `query` is passed through to Gmail search, such as after:YYYY/MM/DD.
     """
     service = get_service()
     max_results = min(max_results, _MAX_RESULTS_LIMIT)
 
     result = service.users().messages().list(
-        userId="me", maxResults=max_results
+        userId="me", maxResults=max_results, q=query
     ).execute()
 
     emails = []
