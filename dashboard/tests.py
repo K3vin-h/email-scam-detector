@@ -107,19 +107,47 @@ class RunScanTests(TestCase):
             labeled_in_gmail=False,
         )
         list_emails.return_value = [{"id": "gmail-1"}]
-        get_email.return_value = {
-            "sender": "sender@example.com",
-            "subject": "Prize",
-            "snippet": "Click here",
-            "body": "Claim your prize now",
-            "received_at": datetime(2026, 5, 17, tzinfo=timezone.utc),
-        }
-        load_predictor.return_value.return_value = (True, 0.95)
 
         result = run_scan()
 
         self.assertEqual(result, {"scanned": 1, "new": 0, "scams_found": 0})
         self.assertEqual(EmailRecord.objects.count(), 1)
+        get_email.assert_not_called()
+        load_predictor.assert_not_called()
+        get_or_create_label.assert_not_called()
+        apply_label.assert_not_called()
+
+    @patch("dashboard.scanner.apply_label")
+    @patch("dashboard.scanner.get_or_create_label")
+    @patch("dashboard.scanner.load_predictor")
+    @patch("dashboard.scanner.get_email")
+    @patch("dashboard.scanner.list_emails")
+    def test_dry_run_skips_existing_record_without_counting_or_classifying(
+        self,
+        list_emails,
+        get_email,
+        load_predictor,
+        get_or_create_label,
+        apply_label,
+    ):
+        EmailRecord.objects.create(
+            gmail_id="gmail-1",
+            sender="sender@example.com",
+            subject="Already scanned",
+            snippet="Existing snippet",
+            received_at=datetime(2026, 5, 17, tzinfo=timezone.utc),
+            confidence=0.95,
+            is_scam=True,
+            labeled_in_gmail=True,
+        )
+        list_emails.return_value = [{"id": "gmail-1"}]
+
+        result = run_scan(dry_run=True)
+
+        self.assertEqual(result, {"scanned": 1, "new": 0, "scams_found": 0})
+        self.assertEqual(EmailRecord.objects.count(), 1)
+        get_email.assert_not_called()
+        load_predictor.assert_not_called()
         get_or_create_label.assert_not_called()
         apply_label.assert_not_called()
 

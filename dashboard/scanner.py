@@ -50,6 +50,9 @@ def run_scan(*, dry_run: bool = False) -> dict:
     for meta in emails:
         gmail_id = meta["id"]
 
+        if EmailRecord.objects.filter(gmail_id=gmail_id).exists():
+            continue
+
         try:
             email = get_email(gmail_id)
         except Exception:
