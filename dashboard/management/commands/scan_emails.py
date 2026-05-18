@@ -20,7 +20,7 @@ class Command(BaseCommand):
         self.stdout.write("Starting Gmail scan...\n")
 
         try:
-            result = run_scan()
+            result = run_scan(dry_run=options["dry_run"])
         except Exception as exc:
             self.stderr.write(self.style.ERROR(f"Scan failed: {exc}\n"))
             raise SystemExit(1)

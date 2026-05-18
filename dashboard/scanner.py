@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 _SCAM_LABEL_NAME = "Scam"
 
 
-def run_scan() -> dict:
+def run_scan(*, dry_run: bool = False) -> dict:
     """
     Fetch recent Gmail messages, classify each, and persist new results.
 
@@ -28,6 +28,9 @@ def run_scan() -> dict:
     are safe and don't produce duplicate records.
 
     Returns a summary: {"scanned": N, "new": N, "scams_found": N}.
+
+    When dry_run=True, Gmail messages are fetched and classified but no
+    EmailRecord rows are saved and no Gmail labels are created or applied.
     """
     settings = ScanSettings.load()
     # Heuristic: fetch ~10 emails per day in the scan window, capped by the API limit.
@@ -57,6 +60,12 @@ def run_scan() -> dict:
         is_scam, confidence = predict(text)
 
         received_at = email.get("received_at") or datetime.now(tz=dt_timezone.utc)
+
+        if dry_run:
+            new_count += 1
+            if is_scam:
+                scams_found += 1
+            continue
 
         record = EmailRecord(
             gmail_id=gmail_id,
