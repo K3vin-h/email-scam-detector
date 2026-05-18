@@ -50,9 +50,6 @@ def run_scan(*, dry_run: bool = False) -> dict:
     for meta in emails:
         gmail_id = meta["id"]
 
-        if EmailRecord.objects.filter(gmail_id=gmail_id).exists():
-            continue
-
         try:
             email = get_email(gmail_id)
         except Exception:
@@ -74,16 +71,20 @@ def run_scan(*, dry_run: bool = False) -> dict:
                 scams_found += 1
             continue
 
-        record = EmailRecord(
+        record, created = EmailRecord.objects.get_or_create(
             gmail_id=gmail_id,
-            sender=email["sender"],
-            subject=email["subject"],
-            snippet=email["snippet"],
-            received_at=received_at,
-            confidence=confidence,
-            is_scam=is_scam,
-            labeled_in_gmail=False,
+            defaults={
+                "sender": email["sender"],
+                "subject": email["subject"],
+                "snippet": email["snippet"],
+                "received_at": received_at,
+                "confidence": confidence,
+                "is_scam": is_scam,
+                "labeled_in_gmail": False,
+            },
         )
+        if not created:
+            continue
 
         if is_scam:
             try:
@@ -91,11 +92,11 @@ def run_scan(*, dry_run: bool = False) -> dict:
                     scam_label_id = get_or_create_label(_SCAM_LABEL_NAME)
                 apply_label(gmail_id, scam_label_id)
                 record.labeled_in_gmail = True
+                record.save(update_fields=["labeled_in_gmail"])
             except Exception:
                 logger.exception("Failed to apply Gmail label to message %s", gmail_id)
             scams_found += 1
 
-        record.save()
         new_count += 1
 
     return {"scanned": len(emails), "new": new_count, "scams_found": scams_found}
