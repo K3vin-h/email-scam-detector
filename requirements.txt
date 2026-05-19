@@ -1,17 +1,23 @@
 # ML
-torch>=2.2.0
-scikit-learn>=1.4.0
-pandas>=2.2.0
-numpy>=1.26.0
-requests>=2.32.0
+torch>=2.11.0,<3.0
+scikit-learn>=1.8.0,<2.0
+pandas>=3.0.0,<4.0
+numpy>=2.4.0,<3.0
+requests>=2.33.0,<3.0
 
 # Web
-django>=6.0.0
-djangorestframework>=3.17.0
-django-cors-headers>=4.9.0
-python-decouple>=3.8
+django>=6.0.0,<6.1
+djangorestframework>=3.17.0,<3.18
+django-cors-headers>=4.9.0,<5.0
+python-decouple>=3.8,<4.0
 
 # Gmail
-google-api-python-client>=2.100.0
-google-auth-oauthlib>=1.0.0
-google-auth-httplib2>=0.2.0
+google-api-python-client>=2.196.0,<3.0
+google-auth-oauthlib>=1.4.0,<2.0
+google-auth-httplib2>=0.4.0,<1.0
+
+# Dev / audit
+bandit>=1.9.0,<2.0
+pip-audit>=2.10.0,<3.0
+pytest-django>=4.12.0,<5.0
+ruff>=0.15.0,<1.0

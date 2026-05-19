@@ -12,7 +12,6 @@ What this script does step-by-step:
   6. After each epoch, check performance on the validation set
   7. Save the best model and the vectorizer to disk
 """
-import pickle
 from pathlib import Path
 
 import numpy as np
@@ -25,6 +24,7 @@ from torch.utils.data import DataLoader
 
 from ml.dataset import SpamDataset
 from ml.model import ScamClassifier
+from ml.vectorizer_io import save_vectorizer
 
 PROCESSED_DIR = Path("data/processed")
 ML_DIR = Path("ml")
@@ -200,9 +200,8 @@ def main():
     print(f"\nBest val loss: {best_val_loss:.4f} — model saved to ml/model.pt")
 
     # Save the fitted vectorizer so predict.py uses the exact same vocabulary.
-    with open(ML_DIR / "vectorizer.pkl", "wb") as f:
-        pickle.dump(vectorizer, f)
-    print("Vectorizer saved to ml/vectorizer.pkl")
+    save_vectorizer(vectorizer, ML_DIR / "vectorizer.json")
+    print("Vectorizer saved to ml/vectorizer.json")
     print("\nRun `python -m ml.evaluate` to see test-set metrics.")
 
 
