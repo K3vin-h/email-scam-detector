@@ -72,6 +72,39 @@ def list_emails(max_results: int | None = 10, query: str | None = None) -> list[
     return emails
 
 
+def list_email_ids(max_results: int | None = 10, query: str | None = None) -> list[str]:
+    """
+    Return Gmail message IDs matching the query.
+
+    This is the efficient scan path: callers that only need IDs can avoid the
+    extra metadata request performed by list_emails().
+    """
+    service = get_service()
+    email_ids = []
+    page_token = None
+
+    while True:
+        remaining = None if max_results is None else max_results - len(email_ids)
+        if remaining is not None and remaining <= 0:
+            break
+
+        page_size = _MAX_RESULTS_LIMIT if remaining is None else min(remaining, _MAX_RESULTS_LIMIT)
+        result = service.users().messages().list(
+            userId="me",
+            maxResults=page_size,
+            q=query,
+            pageToken=page_token,
+        ).execute()
+
+        email_ids.extend(msg["id"] for msg in result.get("messages", []))
+
+        page_token = result.get("nextPageToken")
+        if not page_token:
+            break
+
+    return email_ids
+
+
 def get_email(email_id: str) -> dict:
     """
     Return a single email as a dict.

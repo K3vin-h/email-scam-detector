@@ -1,8 +1,10 @@
 data/
 ml/model.pt
 ml/vectorizer.pkl
+ml/vectorizer.json
 __pycache__/
 *.pyc
+.DS_Store
 .env
 token.json
 credentials.json

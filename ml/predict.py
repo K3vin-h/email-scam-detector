@@ -7,13 +7,13 @@ Run from the command line to test manually:
 
 This is also the function the Django app will call for each incoming email.
 """
-import pickle
 import sys
 from pathlib import Path
 
 import torch
 
 from ml.model import ScamClassifier
+from ml.vectorizer_io import load_vectorizer
 
 ML_DIR = Path("ml")
 
@@ -25,12 +25,15 @@ def load_predictor():
     This is useful for scan jobs that classify many emails in one run, avoiding
     repeated model and vectorizer deserialization for each message.
     """
-    with open(ML_DIR / "vectorizer.pkl", "rb") as f:
-        vectorizer = pickle.load(f)
+    vectorizer = load_vectorizer(ML_DIR / "vectorizer.json")
 
     input_dim = len(vectorizer.vocabulary_)
     model = ScamClassifier(input_dim)
-    model.load_state_dict(torch.load(ML_DIR / "model.pt", map_location="cpu", weights_only=True))
+    try:
+        state_dict = torch.load(ML_DIR / "model.pt", map_location="cpu", weights_only=True)
+    except OSError as exc:
+        raise RuntimeError("Model artifact not found: ml/model.pt") from exc
+    model.load_state_dict(state_dict)
     model.eval()
 
     def _predict(text: str) -> tuple[bool, float]:

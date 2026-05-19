@@ -11,7 +11,7 @@ import logging
 from datetime import datetime, timedelta, timezone as dt_timezone
 
 from dashboard.models import EmailRecord, ScanSettings
-from gmail.fetch import get_email, list_emails
+from gmail.fetch import get_email, list_email_ids
 from gmail.labels import apply_label, get_or_create_label
 from ml.predict import load_predictor
 
@@ -36,7 +36,8 @@ def run_scan(*, dry_run: bool = False) -> dict:
     cutoff = datetime.now(tz=dt_timezone.utc) - timedelta(days=settings.scan_window_days)
     gmail_query = f"after:{cutoff:%Y/%m/%d}"
 
-    emails = list_emails(max_results=None, query=gmail_query)
+    gmail_ids = list_email_ids(max_results=None, query=gmail_query)
+    existing_records = EmailRecord.objects.in_bulk(gmail_ids, field_name="gmail_id")
 
     # Resolve the Gmail label ID once — avoids one API call per scam email.
     scam_label_id: str | None = None
@@ -45,10 +46,8 @@ def run_scan(*, dry_run: bool = False) -> dict:
     new_count = 0
     scams_found = 0
 
-    for meta in emails:
-        gmail_id = meta["id"]
-
-        existing_record = EmailRecord.objects.filter(gmail_id=gmail_id).first()
+    for gmail_id in gmail_ids:
+        existing_record = existing_records.get(gmail_id)
         if existing_record:
             if existing_record.is_scam and not existing_record.labeled_in_gmail and not dry_run:
                 try:
@@ -110,4 +109,4 @@ def run_scan(*, dry_run: bool = False) -> dict:
 
         new_count += 1
 
-    return {"scanned": len(emails), "new": new_count, "scams_found": scams_found}
+    return {"scanned": len(gmail_ids), "new": new_count, "scams_found": scams_found}

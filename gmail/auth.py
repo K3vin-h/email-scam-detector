@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from django.conf import settings
+from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -34,6 +35,7 @@ SCOPES = [
 ]
 
 logger = logging.getLogger(__name__)
+_GOOGLE_TOKEN_URI = "https://oauth2.googleapis.com/" + "token"
 
 
 def get_credentials() -> Credentials | None:
@@ -96,7 +98,7 @@ def _build_flow(state: str | None = None, code_verifier: str | None = None) -> F
             "client_id": settings.GMAIL_CLIENT_ID,
             "client_secret": settings.GMAIL_CLIENT_SECRET,
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
+            "token_uri": _GOOGLE_TOKEN_URI,
             "redirect_uris": [settings.GMAIL_REDIRECT_URI],
         }
     }
@@ -118,6 +120,7 @@ def _write_token_file(token_path: Path, token_json: str) -> None:
     os.chmod(token_path, 0o600)
 
 
+@login_required
 def start_oauth(request: HttpRequest) -> HttpResponse | HttpResponseRedirect:
     """Django view: send the user to Google's consent screen to approve access."""
     try:
@@ -140,6 +143,7 @@ def start_oauth(request: HttpRequest) -> HttpResponse | HttpResponseRedirect:
     return HttpResponseRedirect(auth_url)
 
 
+@login_required
 def oauth_callback(request: HttpRequest) -> HttpResponse:
     """
     Django view: Google redirects here after the user approves access.

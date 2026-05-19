@@ -4,8 +4,9 @@ from datetime import timedelta
 from django.db.models import Count
 from django.utils import timezone
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
 from rest_framework.generics import ListAPIView
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -20,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 
 class HealthView(APIView):
+    permission_classes = [AllowAny]
+
     def get(self, request):
         return Response({"status": "ok"})
 
@@ -34,7 +37,12 @@ class EmailListView(ListAPIView):
         qs = EmailRecord.objects.all()
         is_scam = self.request.query_params.get("is_scam")
         if is_scam is not None:
-            qs = qs.filter(is_scam=is_scam.lower() == "true")
+            value = is_scam.lower()
+            if value not in ("true", "false"):
+                raise ValidationError(
+                    {"is_scam": "Expected 'true' or 'false'."}
+                )
+            qs = qs.filter(is_scam=value == "true")
         return qs
 
 
