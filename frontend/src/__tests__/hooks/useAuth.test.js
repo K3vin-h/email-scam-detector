@@ -18,6 +18,7 @@ describe('useAuth', () => {
     const { result } = renderHook(() => useAuth());
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.authenticated).toBe(true);
+    expect(result.current.error).toBeNull();
   });
 
   it('sets authenticated=false when getSettings throws NOT_AUTHENTICATED', async () => {
@@ -27,12 +28,14 @@ describe('useAuth', () => {
     const { result } = renderHook(() => useAuth());
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.authenticated).toBe(false);
+    expect(result.current.error).toBeNull();
   });
 
-  it('sets authenticated=false on any API error', async () => {
+  it('keeps authentication unknown and exposes error on non-auth API failures', async () => {
     api.getSettings.mockRejectedValueOnce(new Error('HTTP_500'));
     const { result } = renderHook(() => useAuth());
     await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.authenticated).toBe(false);
+    expect(result.current.authenticated).toBeNull();
+    expect(result.current.error).toBe('HTTP_500');
   });
 });

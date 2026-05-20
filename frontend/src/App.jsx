@@ -21,8 +21,27 @@ function LoadingScreen() {
 }
 
 function ProtectedLayout() {
-  const { authenticated, loading } = useAuth();
+  const { authenticated, loading, error } = useAuth();
   if (loading) return <LoadingScreen />;
+  if (error) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center px-6">
+        <div className="max-w-md rounded-xl border border-rose-200 bg-rose-50 px-6 py-5 text-center">
+          <h1 className="text-base font-semibold text-rose-800">Unable to verify session</h1>
+          <p className="mt-2 text-sm text-rose-700">
+            The backend could not be reached. Please check the server and try again.
+          </p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="mt-4 px-4 py-2 bg-white border border-rose-200 text-sm font-medium text-rose-700 rounded-lg hover:bg-rose-100 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
   if (!authenticated) return <Navigate to="/login" replace />;
   return (
     <div className="min-h-screen bg-slate-50">
