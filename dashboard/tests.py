@@ -4,7 +4,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import RequestFactory, TestCase, override_settings
 from rest_framework.test import APIClient
 from sklearn.feature_extraction.text import TfidfVectorizer
 
@@ -12,6 +12,7 @@ from dashboard.models import EmailRecord, ScanSettings
 from dashboard.scanner import run_scan
 from gmail.fetch import list_email_ids as gmail_list_email_ids
 from gmail.fetch import list_emails as gmail_list_emails
+from gmail.auth import _get_frontend_origin, _get_oauth_redirect_origin
 from ml.vectorizer_io import load_vectorizer, save_vectorizer
 
 
@@ -426,6 +427,61 @@ class GmailFetchTests(TestCase):
                 "pageToken": "page-2",
             },
         )
+
+
+class GmailOAuthOriginTests(TestCase):
+    @override_settings(
+        CORS_ALLOWED_ORIGINS=[
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+        ],
+        FRONTEND_ORIGIN="http://localhost:5173",
+    )
+    def test_frontend_origin_preserves_active_loopback_host(self):
+        request = RequestFactory().get(
+            "/auth/gmail/",
+            HTTP_HOST="127.0.0.1:5173",
+        )
+
+        self.assertEqual(_get_frontend_origin(request), "http://127.0.0.1:5173")
+
+    @override_settings(
+        CORS_ALLOWED_ORIGINS=[
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+        ],
+        FRONTEND_ORIGIN="http://localhost:5173",
+    )
+    def test_frontend_origin_uses_trusted_referer_before_default(self):
+        request = RequestFactory().get(
+            "/auth/gmail/",
+            HTTP_REFERER="http://127.0.0.1:5173/settings",
+        )
+
+        self.assertEqual(_get_frontend_origin(request), "http://127.0.0.1:5173")
+
+    @override_settings(
+        CORS_ALLOWED_ORIGINS=[
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+        ],
+        FRONTEND_ORIGIN="http://localhost:5173",
+    )
+    def test_oauth_redirect_origin_uses_saved_trusted_origin(self):
+        request = RequestFactory().get("/auth/callback/")
+        request.session = {"oauth_frontend_origin": "http://127.0.0.1:5173"}
+
+        self.assertEqual(_get_oauth_redirect_origin(request), "http://127.0.0.1:5173")
+
+    @override_settings(
+        CORS_ALLOWED_ORIGINS=["http://localhost:5173"],
+        FRONTEND_ORIGIN="http://localhost:5173",
+    )
+    def test_oauth_redirect_origin_rejects_untrusted_saved_origin(self):
+        request = RequestFactory().get("/auth/callback/")
+        request.session = {"oauth_frontend_origin": "https://evil.example"}
+
+        self.assertEqual(_get_oauth_redirect_origin(request), "http://localhost:5173")
 
 
 class VectorizerIOTests(TestCase):
