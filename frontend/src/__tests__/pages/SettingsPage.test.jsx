@@ -90,6 +90,18 @@ describe('SettingsPage', () => {
     await waitFor(() => expect(screen.getByText(/Failed to save settings/i)).toBeInTheDocument());
   });
 
+  it('shows an initial load error instead of spinning forever', async () => {
+    api.getSettings.mockRejectedValueOnce(new Error('HTTP_500'));
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByText(/Settings unavailable/i)).toBeInTheDocument()
+    );
+    expect(screen.getByText(/Failed to load settings/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
+    expect(screen.queryByText(/Loading settings/i)).not.toBeInTheDocument();
+  });
+
   it('contains Connect Gmail link', async () => {
     renderPage();
     await waitFor(() => expect(screen.getByText(/Connect Gmail/i)).toBeInTheDocument());

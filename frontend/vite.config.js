@@ -6,10 +6,10 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
-      '/api':    { target: 'http://localhost:8000', changeOrigin: true },
-      '/auth':   { target: 'http://localhost:8000', changeOrigin: true },
-      '/admin':  { target: 'http://localhost:8000', changeOrigin: true },
-      '/static': { target: 'http://localhost:8000', changeOrigin: true },
+      '/api':    { target: 'http://localhost:8000', changeOrigin: false },
+      '/auth':   { target: 'http://localhost:8000', changeOrigin: false },
+      '/admin':  { target: 'http://localhost:8000', changeOrigin: false },
+      '/static': { target: 'http://localhost:8000', changeOrigin: false },
     },
   },
   test: {

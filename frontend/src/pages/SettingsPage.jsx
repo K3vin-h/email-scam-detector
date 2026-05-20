@@ -11,7 +11,7 @@ const NOTIFY_OPTIONS = [
 export function SettingsPage() {
   const [searchParams] = useSearchParams();
   const connected = searchParams.get('connected') === 'true';
-  const { settings, loading, saving, saveError, update } = useSettings();
+  const { settings, loading, saving, error, saveError, update } = useSettings();
   const [form, setForm] = useState(null);
   const [saved, setSaved] = useState(false);
   const savedTimerRef = useRef(null);
@@ -20,8 +20,30 @@ export function SettingsPage() {
     if (settings && !form) setForm({ ...settings });
   }, [settings, form]);
 
-  if (loading || !form) {
+  if (loading) {
     return <div className="py-16 text-center text-sm text-slate-400">Loading settings…</div>;
+  }
+
+  if (error && !form) {
+    return (
+      <div className="max-w-xl rounded-xl border border-rose-200 bg-rose-50 px-6 py-5">
+        <h1 className="text-base font-semibold text-rose-800">Settings unavailable</h1>
+        <p className="mt-2 text-sm text-rose-700">
+          Failed to load settings. Please check the backend connection and try again.
+        </p>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="mt-4 px-4 py-2 bg-white border border-rose-200 text-sm font-medium text-rose-700 rounded-lg hover:bg-rose-100 transition-colors"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (!form) {
+    return <div className="py-16 text-center text-sm text-slate-400">Settings are unavailable.</div>;
   }
 
   const handleChange = (e) => {
