@@ -11,3 +11,5 @@ credentials.json
 db.sqlite3
 venv/
 AGENTS.md
+frontend/node_modules/
+frontend/dist/

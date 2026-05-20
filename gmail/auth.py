@@ -17,6 +17,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
@@ -182,5 +183,8 @@ def oauth_callback(request: HttpRequest) -> HttpResponse:
         logger.exception("Failed to save Gmail OAuth credentials")
         return HttpResponse("Failed to save Gmail credentials.", status=500)
 
-    # TODO: once the React frontend exists, redirect to http://localhost:5173/settings?connected=true
-    return HttpResponse("Gmail connected. You may close this tab.")
+    parsed = urlparse(settings.FRONTEND_ORIGIN)
+    if parsed.hostname not in ("localhost", "127.0.0.1") or parsed.scheme not in ("http", "https"):
+        logger.error("Unsafe FRONTEND_ORIGIN configured: %s", settings.FRONTEND_ORIGIN)
+        return HttpResponse("OAuth complete. Please return to the app.", status=200)
+    return HttpResponseRedirect(f"{settings.FRONTEND_ORIGIN}/settings?connected=true")
