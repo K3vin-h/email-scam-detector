@@ -9,14 +9,27 @@ import { ScanButton } from '../components/ScanButton.jsx';
 export function DashboardPage() {
   const { stats, loading: statsLoading, refetch: refetchStats } = useStats();
   const {
-    emails, count, page, setPage, filter, changeFilter, loading: emailsLoading, error: emailsError,
+    emails,
+    count,
+    page,
+    setPage,
+    filter,
+    changeFilter,
+    loading: emailsLoading,
+    error: emailsError,
+    refetch: refetchEmails,
   } = useEmails();
+
+  const handleScanComplete = () => {
+    refetchStats();
+    refetchEmails();
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
-        <ScanButton onComplete={refetchStats} />
+        <ScanButton onComplete={handleScanComplete} />
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">

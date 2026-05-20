@@ -85,6 +85,20 @@ describe('DashboardPage', () => {
     await waitFor(() => expect(screen.getByText(/1 scam/)).toBeInTheDocument());
   });
 
+  it('refreshes stats and emails after a successful scan', async () => {
+    api.triggerScan.mockResolvedValueOnce({ scanned: 50, new: 3, scams_found: 1 });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Scan Now')).toBeInTheDocument());
+
+    api.getStats.mockClear();
+    api.getEmails.mockClear();
+    fireEvent.click(screen.getByText('Scan Now'));
+
+    await waitFor(() => expect(api.triggerScan).toHaveBeenCalled());
+    expect(api.getStats).toHaveBeenCalledTimes(1);
+    expect(api.getEmails).toHaveBeenCalledTimes(1);
+  });
+
   it('filter "Scam only" refetches emails with is_scam=true', async () => {
     renderPage();
     await waitFor(() => expect(screen.getByText('Scam only')).toBeInTheDocument());
