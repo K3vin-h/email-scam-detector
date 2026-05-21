@@ -8,11 +8,12 @@ from django.test import RequestFactory, TestCase, override_settings
 from rest_framework.test import APIClient
 from sklearn.feature_extraction.text import TfidfVectorizer
 
-from dashboard.models import EmailRecord, ScanSettings
+from dashboard.models import EmailRecord, ScanSettings, SummaryReport
 from dashboard.scanner import run_scan
 from gmail.fetch import list_email_ids as gmail_list_email_ids
 from gmail.fetch import list_emails as gmail_list_emails
 from gmail.auth import _get_frontend_origin, _get_oauth_redirect_origin
+from ml.predict import is_scam_confidence
 from ml.vectorizer_io import load_vectorizer, save_vectorizer
 
 
@@ -89,6 +90,11 @@ class RunScanTests(TestCase):
         record = EmailRecord.objects.get(gmail_id="gmail-1")
         self.assertTrue(record.is_scam)
         self.assertTrue(record.labeled_in_gmail)
+        self.assertEqual(SummaryReport.objects.count(), 3)
+        self.assertEqual(
+            SummaryReport.objects.get(period="daily").top_senders,
+            [{"sender": "sender@example.com", "count": 1}],
+        )
         get_or_create_label.assert_called_once_with("Scam")
         apply_label.assert_called_once_with("gmail-1", "Label_123")
 
@@ -161,6 +167,41 @@ class RunScanTests(TestCase):
         load_predictor.assert_not_called()
         get_or_create_label.assert_called_once_with("Scam")
         apply_label.assert_called_once_with("gmail-1", "Label_123")
+
+    @patch("dashboard.scanner.apply_label")
+    @patch("dashboard.scanner.get_or_create_label")
+    @patch("dashboard.scanner.load_predictor")
+    @patch("dashboard.scanner.get_email")
+    @patch("dashboard.scanner.list_email_ids")
+    def test_scan_does_not_retry_label_for_low_confidence_existing_scam(
+        self,
+        list_email_ids,
+        get_email,
+        load_predictor,
+        get_or_create_label,
+        apply_label,
+    ):
+        EmailRecord.objects.create(
+            gmail_id="gmail-1",
+            sender="sender@example.com",
+            subject="Already scanned",
+            snippet="Existing snippet",
+            received_at=datetime(2026, 5, 17, tzinfo=timezone.utc),
+            confidence=0.80,
+            is_scam=True,
+            labeled_in_gmail=False,
+        )
+        list_email_ids.return_value = ["gmail-1"]
+
+        result = run_scan()
+
+        self.assertEqual(result, {"scanned": 1, "new": 0, "scams_found": 0})
+        record = EmailRecord.objects.get(gmail_id="gmail-1")
+        self.assertFalse(record.labeled_in_gmail)
+        get_email.assert_not_called()
+        load_predictor.assert_not_called()
+        get_or_create_label.assert_not_called()
+        apply_label.assert_not_called()
 
     @patch("dashboard.scanner.apply_label")
     @patch("dashboard.scanner.get_or_create_label")
@@ -359,6 +400,31 @@ class DashboardAPITests(TestCase):
             {"error": "Scan failed. Please try again later."},
         )
 
+    def test_reports_api_backfills_reports_from_existing_scan_results(self):
+        self.client.force_authenticate(user=self.user)
+        EmailRecord.objects.create(
+            gmail_id="gmail-1",
+            sender="scam@example.com",
+            subject="Prize",
+            snippet="Claim your prize",
+            received_at=datetime(2026, 5, 17, tzinfo=timezone.utc),
+            confidence=0.95,
+            is_scam=True,
+            labeled_in_gmail=True,
+        )
+
+        response = self.client.get("/api/reports/?period=daily")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["count"], 1)
+        self.assertEqual(body["results"][0]["period"], "daily")
+        self.assertEqual(body["results"][0]["total_scams"], 1)
+        self.assertEqual(
+            body["results"][0]["top_senders"],
+            [{"sender": "scam@example.com", "count": 1}],
+        )
+
 
 class GmailFetchTests(TestCase):
     def test_list_email_ids_fetches_all_pages_when_max_results_is_none(self):
@@ -502,3 +568,11 @@ class VectorizerIOTests(TestCase):
     def test_vectorizer_load_fails_cleanly_for_missing_artifact(self):
         with self.assertRaisesRegex(RuntimeError, "Vectorizer artifact not found"):
             load_vectorizer(Path("missing-vectorizer.json"))
+
+
+class PredictorThresholdTests(TestCase):
+    def test_mid_confidence_messages_are_not_marked_as_scam(self):
+        self.assertFalse(is_scam_confidence(0.84))
+
+    def test_high_confidence_messages_are_marked_as_scam(self):
+        self.assertTrue(is_scam_confidence(0.85))

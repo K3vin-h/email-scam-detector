@@ -80,7 +80,12 @@ download_data.py  →  emails.csv  →  train.py  →  model.pt + vectorizer.jso
 - `dashboard/` — Django app with `EmailRecord`, `ScanSettings`, and `SummaryReport`; authenticated DRF endpoints for emails, stats, settings, reports, and scan triggering; `scan_emails` management command.
 - `dashboard/scanner.py` — lists Gmail IDs with the scan-window query, bulk-skips already-known records, fetches/classifies only new messages, retries labels for known unlabeled scams, honors `dry_run`, and uses atomic `get_or_create` for scan inserts.
 - `gmail/` — OAuth2 flow with session state + PKCE verifier protection (`auth.py`); email fetch with plain-text + HTML fallback and attachment handling (`fetch.py`); efficient ID-only listing for scans; label create/apply (`labels.py`); token saved to `token.json` (gitignored).
-- `frontend/` — React + Vite + Tailwind UI on port 5173. Pages include login, dashboard, reports, and settings. The frontend calls the Django API with `credentials: "include"` and CSRF headers for mutating requests.
+- `frontend/` — React + Vite + Tailwind UI on port 5173. Structure:
+  - `pages/` — `LoginPage`, `DashboardPage`, `ReportsPage`, `SettingsPage`
+  - `components/` — `NavBar`, `EmailRow`, `FilterBar`, `Pagination`, `ScanButton`, `StatCard`, `ReportCard`
+  - `hooks/` — `useAuth`, `useEmails`, `useStats`, `useReports`, `useSettings` (data-fetching hooks)
+  - `api/client.js` — centralized fetch wrapper; sends `credentials: "include"` and `X-CSRFToken` header on mutating requests
+  - `__tests__/` — Vitest unit tests for API client, hooks, and page components
 
 ### Key Constraints
 

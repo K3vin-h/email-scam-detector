@@ -171,3 +171,31 @@ GET /api/settings/: Returns current settings.
 PATCH /api/settings/: Updates the certain setting. fields in the request body
 GET /api/reports/: Returns all reports; /api/reports?period=daily returns only daily reports.
 POST /api/scan/: Triggers an on-demand scan of the user's inbox, and returns the number of scanned emails, new emails scanned, and scams found.
+
+## Frontend
+
+### Architecture
+
+The frontend is built with React and Tailwind CSS. It uses Vite for fast development and building.
+
+### Pages
+
+#### Login Page
+Uses Django authentication to log the user into the application
+
+#### Dashboard Page
+The dashboard consists of:
+1. Total number of scanned emails
+2. Number of scam emails
+3. Number of safe emails
+4. The scam rate 
+
+#### Reports Page
+
+#### Settings Page
+
+### Components
+
+#### Navigation Bar
+
+#### 
