@@ -1,9 +1,9 @@
 import { GlassCard } from './GlassCard.jsx';
 
 const PERIOD_BADGE = {
-  daily:   'bg-amber-50 text-amber-700 border-amber-200',
-  weekly:  'bg-violet-50 text-violet-700 border-violet-100',
-  monthly: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+  daily:   'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-200 dark:border-amber-500/20',
+  weekly:  'bg-violet-50 text-violet-700 border-violet-100 dark:bg-violet-500/10 dark:text-violet-200 dark:border-violet-500/20',
+  monthly: 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-200 dark:border-indigo-500/20',
 };
 const PERIOD_TINT = {
   daily: 'from-amber-500/12 to-amber-500/0',
@@ -22,13 +22,13 @@ function formatDateTime(iso) {
 export function ReportCard({ report, featured = false }) {
   const senders = Array.isArray(report.top_senders) ? report.top_senders : [];
   const maxCount = senders[0]?.count || 1;
-  const badgeClass = PERIOD_BADGE[report.period] ?? 'bg-slate-100 text-slate-600 border-slate-200';
+  const badgeClass = PERIOD_BADGE[report.period] ?? 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700';
   const tintClass = PERIOD_TINT[report.period] ?? 'from-slate-500/10 to-slate-500/0';
   const scanned = report.total_scanned ?? report.total_count ?? null;
   const ratio = scanned ? (report.total_scams / scanned * 100).toFixed(1) : null;
 
   return (
-    <GlassCard hover className={`${featured ? 'p-6 md:col-span-2 ring-1 ring-rose-100/60' : 'p-5'} relative overflow-hidden flex flex-col`}>
+    <GlassCard hover className={`${featured ? 'p-6 md:col-span-2 ring-1 ring-rose-100/60 dark:ring-slate-700/70' : 'p-5'} relative overflow-hidden flex flex-col`}>
       <div className={`absolute inset-0 bg-gradient-to-br ${featured ? 'from-rose-500/12 to-rose-500/0' : tintClass} pointer-events-none`} />
       <div className="relative mb-3 flex items-start justify-between gap-3">
         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${badgeClass}`}>
@@ -52,7 +52,7 @@ export function ReportCard({ report, featured = false }) {
       </div>
 
       {senders.length > 0 && (
-        <div className="relative border-t border-slate-200/70 pt-4 mt-4">
+        <div className="relative border-t border-slate-200/70 pt-4 mt-4 dark:border-slate-700/70">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Top Senders</p>
           <ol className="space-y-2.5">
             {senders.map((s, i) => (
@@ -64,7 +64,7 @@ export function ReportCard({ report, featured = false }) {
                   </span>
                   <span className="text-slate-500 tabular-nums shrink-0">{s.count}</span>
                 </div>
-                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden dark:bg-slate-800">
                   <div
                     className="h-full bg-gradient-to-r from-rose-400 to-rose-500 rounded-full transition-all"
                     style={{ width: `${(s.count / maxCount) * 100}%` }}

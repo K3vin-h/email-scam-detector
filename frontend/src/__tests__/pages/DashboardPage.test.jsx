@@ -17,6 +17,7 @@ const mockEmailsPage = {
   count: 2,
   results: [
     {
+      id: 1,
       gmail_id: 'msg1',
       sender: 'scammer@evil.com',
       subject: 'You won a prize!',
@@ -24,9 +25,25 @@ const mockEmailsPage = {
       received_at: '2024-01-15T10:00:00Z',
       confidence: 0.97,
       is_scam: true,
+      risk_level: 'scam',
+      risk_label: 'Scam',
       labeled_in_gmail: true,
     },
     {
+      id: 3,
+      gmail_id: 'msg3',
+      sender: 'notice@example.com',
+      subject: 'Verify your login',
+      snippet: 'Please review this sign-in.',
+      received_at: '2024-01-16T10:00:00Z',
+      confidence: 0.62,
+      is_scam: false,
+      risk_level: 'possible_scam',
+      risk_label: 'Possible scam',
+      labeled_in_gmail: false,
+    },
+    {
+      id: 2,
       gmail_id: 'msg2',
       sender: 'friend@gmail.com',
       subject: 'Dinner tonight?',
@@ -34,6 +51,8 @@ const mockEmailsPage = {
       received_at: '2024-01-16T12:00:00Z',
       confidence: 0.08,
       is_scam: false,
+      risk_level: 'legit',
+      risk_label: 'Legit',
       labeled_in_gmail: false,
     },
   ],
@@ -69,10 +88,11 @@ describe('DashboardPage', () => {
     await waitFor(() => expect(screen.getByText('You won a prize!')).toBeInTheDocument());
   });
 
-  it('shows Scam badge for scam emails and Legit for safe ones', async () => {
+  it('shows Scam, Possible scam, and Legit badges', async () => {
     renderPage();
     await waitFor(() => {
       expect(screen.getByText('Scam')).toBeInTheDocument();
+      expect(screen.getByText('Possible scam')).toBeInTheDocument();
       expect(screen.getByText('Legit')).toBeInTheDocument();
     });
   });
@@ -101,27 +121,55 @@ describe('DashboardPage', () => {
     expect(api.getEmails).toHaveBeenCalledTimes(1);
   });
 
-  it('filter "Scam only" refetches emails with is_scam=true', async () => {
+  it('manual correction marks an email as legit and refreshes data', async () => {
+    api.correctEmailRisk.mockResolvedValueOnce({ risk_level: 'legit', risk_label: 'Legit' });
     renderPage();
-    await waitFor(() => expect(screen.getByText('Scam only')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText('Change risk for You won a prize!: Scam')).toBeInTheDocument());
+
+    api.getStats.mockClear();
+    api.getEmails.mockClear();
+    fireEvent.click(screen.getByLabelText('Change risk for You won a prize!: Scam'));
+    await waitFor(() => expect(screen.getByLabelText('Mark You won a prize! as Legit')).toBeInTheDocument());
+    fireEvent.click(screen.getByLabelText('Mark You won a prize! as Legit'));
+
+    await waitFor(() => expect(api.correctEmailRisk).toHaveBeenCalledWith(1, 'legit'));
+    expect(api.getStats).toHaveBeenCalledTimes(1);
+    expect(api.getEmails).toHaveBeenCalledTimes(1);
+  });
+
+  it('filter "Scam" refetches emails with risk_level=scam', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Scam' })).toBeInTheDocument());
 
     api.getEmails.mockClear();
-    fireEvent.click(screen.getByText('Scam only'));
+    fireEvent.click(screen.getByRole('button', { name: 'Scam' }));
     await waitFor(() => expect(api.getEmails).toHaveBeenCalled());
     expect(api.getEmails).toHaveBeenLastCalledWith(
-      expect.objectContaining({ is_scam: 'true' })
+      expect.objectContaining({ risk_level: 'scam' })
     );
   });
 
-  it('filter "Legit only" refetches with is_scam=false', async () => {
+  it('filter "Possible scam" refetches with risk_level=possible_scam', async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByText('Legit only')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Possible scam' })).toBeInTheDocument());
 
     api.getEmails.mockClear();
-    fireEvent.click(screen.getByText('Legit only'));
+    fireEvent.click(screen.getByRole('button', { name: 'Possible scam' }));
     await waitFor(() => expect(api.getEmails).toHaveBeenCalled());
     expect(api.getEmails).toHaveBeenLastCalledWith(
-      expect.objectContaining({ is_scam: 'false' })
+      expect.objectContaining({ risk_level: 'possible_scam' })
+    );
+  });
+
+  it('filter "Legit" refetches with risk_level=legit', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Legit' })).toBeInTheDocument());
+
+    api.getEmails.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Legit' }));
+    await waitFor(() => expect(api.getEmails).toHaveBeenCalled());
+    expect(api.getEmails).toHaveBeenLastCalledWith(
+      expect.objectContaining({ risk_level: 'legit' })
     );
   });
 

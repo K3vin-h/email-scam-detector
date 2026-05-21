@@ -12,6 +12,7 @@ from rest_framework.views import APIView
 
 from dashboard.models import EmailRecord, ScanSettings, SummaryReport
 from dashboard.reports import ensure_summary_reports
+from dashboard.risk import RISK_LEVELS, RISK_SCAM, risk_level_for_email
 from dashboard.serializers import (
     EmailRecordSerializer,
     ScanSettingsSerializer,
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 class HealthView(APIView):
+    """GET /api/health/ — health of the backend."""
     permission_classes = [AllowAny]
 
     def get(self, request):
@@ -37,6 +39,7 @@ class EmailListView(ListAPIView):
     def get_queryset(self):
         qs = EmailRecord.objects.all()
         is_scam = self.request.query_params.get("is_scam")
+        risk_level = self.request.query_params.get("risk_level")
         if is_scam is not None:
             value = is_scam.lower()
             if value not in ("true", "false"):
@@ -44,6 +47,22 @@ class EmailListView(ListAPIView):
                     {"is_scam": "Expected 'true' or 'false'."}
                 )
             qs = qs.filter(is_scam=value == "true")
+        if risk_level is not None:
+            if risk_level not in ("legit", "possible_scam", "scam"):
+                raise ValidationError(
+                    {"risk_level": "Expected 'legit', 'possible_scam', or 'scam'."}
+                )
+            ids = [
+                record.id
+                for record in qs
+                if risk_level_for_email(
+                    sender=record.sender,
+                    confidence=record.confidence,
+                    is_scam=record.is_scam,
+                    user_risk_override=record.user_risk_override,
+                ) == risk_level
+            ]
+            qs = qs.filter(id__in=ids)
         return qs
 
 
@@ -124,8 +143,20 @@ class StatsView(APIView):
         last_7 = now - timedelta(days=7)
         last_30 = now - timedelta(days=30)
 
+        scam_ids = [
+            record.id
+            for record in EmailRecord.objects.all()
+            if risk_level_for_email(
+                    sender=record.sender,
+                    confidence=record.confidence,
+                    is_scam=record.is_scam,
+                    user_risk_override=record.user_risk_override,
+            ) == RISK_SCAM
+        ]
+        scam_qs = EmailRecord.objects.filter(id__in=scam_ids)
+
         top_senders = list(
-            EmailRecord.objects.filter(is_scam=True)
+            scam_qs
             .values("sender")
             .annotate(count=Count("id"))
             .order_by("-count")[:5]
@@ -134,13 +165,9 @@ class StatsView(APIView):
         return Response(
             {
                 "total_scanned": EmailRecord.objects.count(),
-                "total_scams": EmailRecord.objects.filter(is_scam=True).count(),
-                "scams_last_7_days": EmailRecord.objects.filter(
-                    is_scam=True, received_at__gte=last_7
-                ).count(),
-                "scams_last_30_days": EmailRecord.objects.filter(
-                    is_scam=True, received_at__gte=last_30
-                ).count(),
+                "total_scams": scam_qs.count(),
+                "scams_last_7_days": scam_qs.filter(received_at__gte=last_7).count(),
+                "scams_last_30_days": scam_qs.filter(received_at__gte=last_30).count(),
                 "top_scam_senders": top_senders,
             }
         )
@@ -160,7 +187,16 @@ class DailyStatsView(APIView):
             .values("scanned_at__date")
             .annotate(
                 scanned=Count("id"),
-                scams=Count("id", filter=Q(is_scam=True)),
+                scams=Count("id", filter=Q(id__in=[
+                    record.id
+                    for record in EmailRecord.objects.all()
+                    if risk_level_for_email(
+                        sender=record.sender,
+                        confidence=record.confidence,
+                        is_scam=record.is_scam,
+                        user_risk_override=record.user_risk_override,
+                    ) == RISK_SCAM
+                ])),
             )
             .order_by("scanned_at__date")
         )
@@ -195,7 +231,17 @@ class TopSendersView(APIView):
         last_7 = today - timedelta(days=6)
         prior_7_start = today - timedelta(days=13)
 
-        scam_qs = EmailRecord.objects.filter(is_scam=True)
+        scam_ids = [
+            record.id
+            for record in EmailRecord.objects.all()
+            if risk_level_for_email(
+                sender=record.sender,
+                confidence=record.confidence,
+                is_scam=record.is_scam,
+                user_risk_override=record.user_risk_override,
+            ) == RISK_SCAM
+        ]
+        scam_qs = EmailRecord.objects.filter(id__in=scam_ids)
 
         top_email = (
             scam_qs.values("sender")
@@ -247,3 +293,31 @@ class ScanView(APIView):
                 {"error": "Scan failed. Please try again later."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+class EmailRiskFeedbackView(APIView):
+    """PATCH /api/emails/<id>/risk/ — manually correct an email risk tag."""
+
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, pk):
+        risk_level = request.data.get("risk_level")
+        if risk_level not in RISK_LEVELS:
+            return Response(
+                {"risk_level": "Expected 'legit', 'possible_scam', or 'scam'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            record = EmailRecord.objects.get(pk=pk)
+        except EmailRecord.DoesNotExist:
+            return Response(
+                {"detail": "Email not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        record.user_risk_override = risk_level
+        record.save(update_fields=["user_risk_override"])
+        SummaryReport.objects.all().delete()
+        ensure_summary_reports()
+        return Response(EmailRecordSerializer(record).data)

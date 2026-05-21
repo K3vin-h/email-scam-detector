@@ -72,6 +72,20 @@ describe('api.patchSettings (PATCH)', () => {
   });
 });
 
+describe('api.correctEmailRisk (PATCH)', () => {
+  it('sends the selected risk level', async () => {
+    fetch.mockResolvedValueOnce(mockJson({ risk_level: 'legit' }));
+    await api.correctEmailRisk(12, 'legit');
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/emails/12/risk/',
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ risk_level: 'legit' }),
+      })
+    );
+  });
+});
+
 describe('error handling', () => {
   it('throws NOT_AUTHENTICATED on 403', async () => {
     fetch.mockResolvedValueOnce({ ok: false, status: 403 });

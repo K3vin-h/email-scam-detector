@@ -27,28 +27,28 @@ describe('useEmails', () => {
     expect(result.current.count).toBe(1);
   });
 
-  it('includes is_scam param when filter is set', async () => {
+  it('includes risk_level param when filter is set', async () => {
     const { result } = renderHook(() => useEmails());
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     api.getEmails.mockClear();
-    act(() => result.current.changeFilter('true'));
+    act(() => result.current.changeFilter('possible_scam'));
     await waitFor(() => expect(api.getEmails).toHaveBeenCalled());
-    expect(api.getEmails).toHaveBeenLastCalledWith(expect.objectContaining({ is_scam: 'true' }));
+    expect(api.getEmails).toHaveBeenLastCalledWith(expect.objectContaining({ risk_level: 'possible_scam' }));
   });
 
-  it('omits is_scam param when filter is empty string', async () => {
+  it('omits risk_level param when filter is empty string', async () => {
     const { result } = renderHook(() => useEmails());
     await waitFor(() => expect(result.current.loading).toBe(false));
     const lastParams = api.getEmails.mock.calls.at(-1)[0];
-    expect(lastParams.is_scam).toBeUndefined();
+    expect(lastParams.risk_level).toBeUndefined();
   });
 
   it('resets to page 1 when changeFilter is called', async () => {
     const { result } = renderHook(() => useEmails());
     await waitFor(() => expect(result.current.loading).toBe(false));
     act(() => result.current.setPage(3));
-    act(() => result.current.changeFilter('false'));
+    act(() => result.current.changeFilter('legit'));
     expect(result.current.page).toBe(1);
   });
 

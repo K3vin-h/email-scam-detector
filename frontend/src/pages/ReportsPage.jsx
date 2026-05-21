@@ -44,22 +44,22 @@ function ReportsOverview({ data, loading }) {
           </div>
         </div>
       </div>
-      <div className="relative flex items-end gap-2 h-36 sm:h-44">
+      <div className="relative flex items-end gap-2 h-36 sm:h-44 rounded-xl border border-slate-200/70 bg-white/35 px-3 pt-4 pb-2 dark:border-slate-700/70 dark:bg-slate-950/25">
         <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
-          {[0, 1, 2, 3].map((i) => <div key={i} className="border-t border-dashed border-slate-200/80" />)}
+          {[0, 1, 2, 3].map((i) => <div key={i} className="border-t border-slate-200/60 dark:border-slate-800/90" />)}
         </div>
         {data.map((d) => {
           const scannedH = Math.round((d.scanned / maxScanned) * 100);
           const scamH = d.scanned > 0 ? Math.round((d.scams / d.scanned) * scannedH) : 0;
           return (
-            <div key={d.date} className="group relative flex-1 h-full flex flex-col justify-end gap-1 min-w-0">
+            <div key={d.date} className="group relative z-10 flex-1 h-full flex flex-col justify-end gap-1 min-w-0">
               <div className="absolute -top-1 left-1/2 -translate-x-1/2 -translate-y-full opacity-0 group-hover:opacity-100 transition pointer-events-none z-10">
-                <div className="bg-slate-900 text-white text-[10px] font-medium px-2 py-1 rounded-md whitespace-nowrap shadow-lg">
-                  {d.day}: <span className="text-rose-300">{d.scams}</span> / {d.scanned}
+                <div className="bg-slate-900 text-white text-[10px] font-medium px-2 py-1 rounded-md whitespace-nowrap shadow-lg dark:bg-slate-800 dark:text-slate-100 dark:border dark:border-slate-700">
+                  {d.day}: <span className="text-rose-300 dark:text-rose-300">{d.scams}</span> / {d.scanned}
                 </div>
               </div>
-              <div className="relative w-full rounded-t-md bg-gradient-to-t from-slate-200 to-slate-300/70 transition-all group-hover:from-slate-300 group-hover:to-slate-400/70" style={{ height: `${scannedH}%`, minHeight: '4px' }} title={`${d.scanned} scanned`}>
-                <div className="absolute bottom-0 left-0 right-0 rounded-t-md bg-gradient-to-t from-rose-500 to-rose-400 shadow-sm shadow-rose-500/30" style={{ height: scannedH ? `${(scamH / scannedH) * 100}%` : '0%' }} title={`${d.scams} scams`} />
+              <div className="relative mx-auto w-full max-w-8 overflow-hidden rounded-t-lg rounded-b-sm bg-gradient-to-t from-slate-200 to-slate-300/80 shadow-inner shadow-white/50 transition-all group-hover:from-slate-300 group-hover:to-slate-400/80 dark:from-slate-800 dark:to-slate-700/85 dark:shadow-slate-950/20" style={{ height: `${scannedH}%`, minHeight: '5px' }} title={`${d.scanned} scanned`}>
+                <div className="absolute bottom-0 left-0 right-0 rounded-t-md bg-gradient-to-t from-rose-600 to-rose-400 shadow-sm shadow-rose-500/25 dark:from-rose-500 dark:to-rose-300" style={{ height: scannedH ? `${(scamH / scannedH) * 100}%` : '0%' }} title={`${d.scams} scams`} />
               </div>
             </div>
           );

@@ -33,4 +33,5 @@ export const api = {
   patchSettings:  (data)   => request('/api/settings/', { method: 'PATCH', body: data }),
   getReports:     (period) => request(`/api/reports/${period ? `?${new URLSearchParams({ period })}` : ''}`),
   triggerScan:    ()       => request('/api/scan/', { method: 'POST' }),
+  correctEmailRisk: (id, riskLevel) => request(`/api/emails/${id}/risk/`, { method: 'PATCH', body: { risk_level: riskLevel } }),
 };

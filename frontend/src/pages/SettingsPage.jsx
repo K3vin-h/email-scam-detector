@@ -244,7 +244,7 @@ export function SettingsPage() {
                 onChange={handleSelectChange('notify_frequency')}
                 options={NOTIFY_OPTIONS}
               />
-              <div className="flex items-center justify-between gap-3 rounded-xl bg-white/50 border border-slate-200 px-4 py-3">
+              <div className="flex items-center justify-between gap-3 rounded-xl bg-white/50 border border-slate-200 px-4 py-3 dark:bg-slate-900/55 dark:border-slate-700/80">
                 <div className="min-w-0">
                   <label htmlFor="notify_via_email" className="text-sm font-semibold text-slate-800">Email notifications</label>
                   <p className="text-xs text-slate-500 mt-0.5">Send report summaries to an email of your choice.</p>
@@ -287,7 +287,7 @@ export function SettingsPage() {
             </div>
             <div className="rounded-xl bg-gradient-to-r from-emerald-50/80 to-white/60 border border-emerald-200/60 p-4 dark:from-emerald-950/28 dark:via-slate-900/75 dark:to-slate-900/55 dark:border-emerald-500/20">
               <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                <span className="shrink-0 w-10 h-10 rounded-full bg-white border border-emerald-200 flex items-center justify-center text-emerald-600 dark:bg-slate-950/70 dark:border-slate-700 dark:text-emerald-300">
+                <span className="shrink-0 w-10 h-10 rounded-xl bg-emerald-100/80 border border-emerald-200/80 flex items-center justify-center text-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-300">
                   <Mail size={18} strokeWidth={2} />
                 </span>
                 <div className="flex-1 min-w-0">

@@ -72,19 +72,20 @@ download_data.py  →  emails.csv  →  train.py  →  model.pt + vectorizer.jso
 - `model.py` — `ScamClassifier(nn.Module)`: Linear(input_dim→256) → ReLU → Dropout(0.3) → Linear(256→64) → ReLU → Dropout(0.3) → Linear(64→1) → Sigmoid
 - `train.py` — fits `TfidfVectorizer(max_features=10_000)` on train split only, saves best checkpoint by val loss, and writes the vectorizer as JSON; hyperparameters (EPOCHS, BATCH_SIZE, LEARNING_RATE, MAX_FEATURES) are constants at the top of the file
 - `vectorizer_io.py` — saves/loads the fitted TF-IDF vectorizer as trusted JSON to avoid unsafe pickle deserialization
-- `predict.py` — `predict(text) → (is_scam: bool, confidence: float)`; loads model + vectorizer from disk on each CLI call, while scan jobs load the predictor once and reuse it
+- `predict.py` — `predict(text) → (is_scam: bool, confidence: float)`; applies the high-confidence scam threshold, loads model + vectorizer from disk on each CLI call, while scan jobs load the predictor once and reuse it
 
 ### Web Layer
 
 - `core/` — Django project package (settings, urls, wsgi). DRF defaults require authentication, throttle requests, and render JSON only. Production security settings default to strict values when `DEBUG=False`.
-- `dashboard/` — Django app with `EmailRecord`, `ScanSettings`, and `SummaryReport`; authenticated DRF endpoints for emails, stats, settings, reports, and scan triggering; `scan_emails` management command.
-- `dashboard/scanner.py` — lists Gmail IDs with the scan-window query, bulk-skips already-known records, fetches/classifies only new messages, retries labels for known unlabeled scams, honors `dry_run`, and uses atomic `get_or_create` for scan inserts.
+- `dashboard/` — Django app with `EmailRecord` (includes `reasons` JSONField), `ScanSettings`, and `SummaryReport`; authenticated DRF endpoints for emails, stats, settings, reports, scan triggering, daily stats (`DailyStatsView`), and top senders (`TopSendersView`); `scan_emails` management command.
+- `dashboard/scanner.py` — lists Gmail IDs with the scan-window query, bulk-skips already-known records, fetches/classifies only new messages, extracts and persists classification reasons, retries labels for known unlabeled scams, honors `dry_run`, and uses atomic `get_or_create` for scan inserts.
+- `dashboard/reports.py` — report generation logic for summary reports.
 - `gmail/` — OAuth2 flow with session state + PKCE verifier protection (`auth.py`); email fetch with plain-text + HTML fallback and attachment handling (`fetch.py`); efficient ID-only listing for scans; label create/apply (`labels.py`); token saved to `token.json` (gitignored).
-- `frontend/` — React + Vite + Tailwind UI on port 5173. Structure:
+- `frontend/` — React + Vite + Tailwind UI on port 5173, glassmorphism design system. Structure:
   - `pages/` — `LoginPage`, `DashboardPage`, `ReportsPage`, `SettingsPage`
-  - `components/` — `NavBar`, `EmailRow`, `FilterBar`, `Pagination`, `ScanButton`, `StatCard`, `ReportCard`
-  - `hooks/` — `useAuth`, `useEmails`, `useStats`, `useReports`, `useSettings` (data-fetching hooks)
-  - `api/client.js` — centralized fetch wrapper; sends `credentials: "include"` and `X-CSRFToken` header on mutating requests
+  - `components/` — layout: `PageShell`, `NavBar`, `MobileTabBar`; data: `EmailRow`, `FilterBar`, `Pagination`, `ScanButton`, `StatCard`, `ReportCard`, `KpiTile`, `SecurityHero`; primitives: `GlassCard`, `Select`, `TextInput`, `Toggle`, `NumberStepper`, `ThemeToggle`; state: `UnsavedChangesContext`
+  - `hooks/` — `useAuth`, `useEmails`, `useStats`, `useReports`, `useSettings`, `useDailyStats`, `useSenderStats`
+  - `api/client.js` — centralized fetch wrapper; sends `credentials: "include"` and `X-CSRFToken` header on mutating requests; includes `getHealth`, `getDailyStats`, `getSenderStats`
   - `__tests__/` — Vitest unit tests for API client, hooks, and page components
 
 ### Key Constraints

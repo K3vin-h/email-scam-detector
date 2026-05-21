@@ -12,9 +12,10 @@ from datetime import datetime, timedelta, timezone as dt_timezone
 
 from dashboard.models import EmailRecord, ScanSettings
 from dashboard.reports import generate_summary_reports
+from dashboard.risk import RISK_SCAM, risk_level_for_email
 from gmail.fetch import get_email, list_email_ids
 from gmail.labels import apply_label, get_or_create_label
-from ml.predict import is_scam_confidence, load_predictor
+from ml.predict import load_predictor
 
 logger = logging.getLogger(__name__)
 
@@ -90,8 +91,12 @@ def run_scan(*, dry_run: bool = False) -> dict:
         existing_record = existing_records.get(gmail_id)
         if existing_record:
             should_label_existing = (
-                existing_record.is_scam
-                and is_scam_confidence(existing_record.confidence)
+                risk_level_for_email(
+                    sender=existing_record.sender,
+                    confidence=existing_record.confidence,
+                    is_scam=existing_record.is_scam,
+                    user_risk_override=existing_record.user_risk_override,
+                ) == RISK_SCAM
                 and not existing_record.labeled_in_gmail
                 and not dry_run
             )
@@ -119,7 +124,13 @@ def run_scan(*, dry_run: bool = False) -> dict:
 
         if predict_email is None:
             predict_email = load_predictor()
-        is_scam, confidence = predict_email(text)
+        model_is_scam, confidence = predict_email(text)
+        risk_level = risk_level_for_email(
+            sender=email["sender"],
+            confidence=confidence,
+            is_scam=model_is_scam,
+        )
+        is_scam = risk_level == RISK_SCAM
 
         if dry_run:
             new_count += 1

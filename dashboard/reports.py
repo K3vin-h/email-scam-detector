@@ -4,6 +4,7 @@ from django.db.models import Count
 from django.utils import timezone
 
 from dashboard.models import EmailRecord, SummaryReport
+from dashboard.risk import RISK_SCAM, risk_level_for_email
 
 
 _REPORT_WINDOWS = {
@@ -17,10 +18,21 @@ def generate_summary_reports() -> list[SummaryReport]:
     """Create current daily, weekly, and monthly scam summary snapshots."""
     now = timezone.now()
     reports: list[SummaryReport] = []
+    SummaryReport.objects.filter(period__in=_REPORT_WINDOWS).delete()
 
     for period, window in _REPORT_WINDOWS.items():
         since = now - window
-        scam_qs = EmailRecord.objects.filter(is_scam=True, scanned_at__gte=since)
+        scam_ids = [
+            record.id
+            for record in EmailRecord.objects.filter(scanned_at__gte=since)
+            if risk_level_for_email(
+                sender=record.sender,
+                confidence=record.confidence,
+                is_scam=record.is_scam,
+                user_risk_override=record.user_risk_override,
+            ) == RISK_SCAM
+        ]
+        scam_qs = EmailRecord.objects.filter(id__in=scam_ids)
         top_senders = list(
             scam_qs.values("sender")
             .annotate(count=Count("id"))

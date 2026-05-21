@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client.js';
 
 export function useEmails() {
@@ -7,20 +7,27 @@ export function useEmails() {
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState('');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  const loadedRef = useRef(false);
 
   const fetchEmails = useCallback(() => {
-    setLoading(true);
+    if (!loadedRef.current) setLoading(true);
+    else setRefreshing(true);
     setError(null);
     const params = { page };
-    if (filter !== '') params.is_scam = filter;
+    if (filter !== '') params.risk_level = filter;
     api.getEmails(params)
       .then((data) => {
         setEmails(data.results);
         setCount(data.count);
       })
       .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        loadedRef.current = true;
+        setLoading(false);
+        setRefreshing(false);
+      });
   }, [page, filter]);
 
   useEffect(() => { fetchEmails(); }, [fetchEmails]);
@@ -30,5 +37,11 @@ export function useEmails() {
     setFilter(newFilter);
   };
 
-  return { emails, count, page, setPage, filter, changeFilter, loading, error, refetch: fetchEmails };
+  const updateEmail = (gmailId, patch) => {
+    setEmails((current) =>
+      current.map((email) => email.gmail_id === gmailId ? { ...email, ...patch } : email)
+    );
+  };
+
+  return { emails, count, page, setPage, filter, changeFilter, loading, refreshing, error, refetch: fetchEmails, updateEmail };
 }

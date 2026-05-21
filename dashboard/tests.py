@@ -9,6 +9,7 @@ from rest_framework.test import APIClient
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 from dashboard.models import EmailRecord, ScanSettings, SummaryReport
+from dashboard.risk import RISK_LEGIT, RISK_POSSIBLE, RISK_SCAM, risk_level_for_email
 from dashboard.scanner import run_scan
 from gmail.fetch import list_email_ids as gmail_list_email_ids
 from gmail.fetch import list_emails as gmail_list_emails
@@ -348,6 +349,107 @@ class DashboardAPITests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json(), {"is_scam": "Expected 'true' or 'false'."})
 
+    def test_email_list_filters_by_risk_level(self):
+        self.client.force_authenticate(user=self.user)
+        EmailRecord.objects.create(
+            gmail_id="trusted",
+            sender="Adobe Acrobat <mail@mail.adobe.com>",
+            subject="Adobe update",
+            snippet="Your document is ready",
+            received_at=datetime(2026, 5, 17, tzinfo=timezone.utc),
+            confidence=0.99,
+            is_scam=True,
+            labeled_in_gmail=False,
+        )
+        EmailRecord.objects.create(
+            gmail_id="possible",
+            sender="notice@example.com",
+            subject="Verify your account",
+            snippet="Please review",
+            received_at=datetime(2026, 5, 17, tzinfo=timezone.utc),
+            confidence=0.70,
+            is_scam=False,
+            labeled_in_gmail=False,
+        )
+        EmailRecord.objects.create(
+            gmail_id="scam",
+            sender="bad@example.com",
+            subject="Claim prize",
+            snippet="Act now",
+            received_at=datetime(2026, 5, 17, tzinfo=timezone.utc),
+            confidence=0.95,
+            is_scam=True,
+            labeled_in_gmail=False,
+        )
+
+        legit_response = self.client.get("/api/emails/?risk_level=legit")
+        possible_response = self.client.get("/api/emails/?risk_level=possible_scam")
+        scam_response = self.client.get("/api/emails/?risk_level=scam")
+
+        self.assertEqual(legit_response.status_code, 200)
+        self.assertEqual(legit_response.json()["results"][0]["gmail_id"], "trusted")
+        self.assertEqual(legit_response.json()["results"][0]["risk_label"], "Legit")
+        self.assertEqual(possible_response.json()["results"][0]["gmail_id"], "possible")
+        self.assertEqual(scam_response.json()["results"][0]["gmail_id"], "scam")
+
+    def test_email_list_rejects_invalid_risk_level_filter(self):
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get("/api/emails/?risk_level=maybe")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json(),
+            {"risk_level": "Expected 'legit', 'possible_scam', or 'scam'."},
+        )
+
+    def test_email_risk_feedback_overrides_model_risk(self):
+        self.client.force_authenticate(user=self.user)
+        record = EmailRecord.objects.create(
+            gmail_id="gmail-1",
+            sender="bad@example.com",
+            subject="False positive",
+            snippet="Looks safe",
+            received_at=datetime(2026, 5, 17, tzinfo=timezone.utc),
+            confidence=0.95,
+            is_scam=True,
+            labeled_in_gmail=False,
+        )
+
+        response = self.client.patch(
+            f"/api/emails/{record.id}/risk/",
+            {"risk_level": "legit"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        record.refresh_from_db()
+        self.assertEqual(record.user_risk_override, "legit")
+        self.assertEqual(response.json()["risk_level"], "legit")
+        self.assertEqual(response.json()["risk_label"], "Legit")
+
+    def test_email_risk_feedback_rejects_invalid_risk(self):
+        self.client.force_authenticate(user=self.user)
+        record = EmailRecord.objects.create(
+            gmail_id="gmail-1",
+            sender="bad@example.com",
+            subject="Message",
+            snippet="Snippet",
+            received_at=datetime(2026, 5, 17, tzinfo=timezone.utc),
+            confidence=0.95,
+            is_scam=True,
+            labeled_in_gmail=False,
+        )
+
+        response = self.client.patch(
+            f"/api/emails/{record.id}/risk/",
+            {"risk_level": "wrong"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("risk_level", response.json())
+
     def test_scan_settings_validation_rejects_unsafe_values(self):
         self.client.force_authenticate(user=self.user)
         ScanSettings.load()
@@ -576,3 +678,45 @@ class PredictorThresholdTests(TestCase):
 
     def test_high_confidence_messages_are_marked_as_scam(self):
         self.assertTrue(is_scam_confidence(0.85))
+
+
+class RiskLevelTests(TestCase):
+    def test_trusted_adobe_sender_is_legit_even_with_high_model_confidence(self):
+        self.assertEqual(
+            risk_level_for_email(
+                sender="Adobe Acrobat <mail@mail.adobe.com>",
+                confidence=0.99,
+                is_scam=True,
+            ),
+            RISK_LEGIT,
+        )
+
+    def test_trusted_osu_sender_is_legit_even_with_high_model_confidence(self):
+        self.assertEqual(
+            risk_level_for_email(
+                sender='"osu!" <osu@ppy.sh>',
+                confidence=0.99,
+                is_scam=True,
+            ),
+            RISK_LEGIT,
+        )
+
+    def test_medium_confidence_email_is_possible_scam(self):
+        self.assertEqual(
+            risk_level_for_email(
+                sender="notice@example.com",
+                confidence=0.65,
+                is_scam=False,
+            ),
+            RISK_POSSIBLE,
+        )
+
+    def test_high_confidence_model_scam_is_scam(self):
+        self.assertEqual(
+            risk_level_for_email(
+                sender="bad@example.com",
+                confidence=0.95,
+                is_scam=True,
+            ),
+            RISK_SCAM,
+        )

@@ -82,17 +82,29 @@ The loss function is Binary Cross Entropy Loss. This measures the difference bet
 
 Adam optimizer is used to update the weights. We use Adam because our model does not need much tuning, and Adam is able to quickly adjust to the loss.
 
-The outputs are saved to `vectorized.pkl` for the vocabulary vectorizer and `model.pt` for the trained model.
+The outputs are saved to `ml/vectorizer.json` for the vocabulary vectorizer and `ml/model.pt` for the trained model. The vectorizer is saved as JSON so the app does not need to load a pickle file at runtime. Older versions used `vectorizer.pkl`, but the current prediction code uses `vectorizer.json`.
 
 ### Evaluation
 
-We use new data sets that the model has not seen before to evaluate its performance. These data sets are not used in the training, validation, or test sets. The model gets scored on three main metrics:
+We use the held-out test set that the model has not seen during training or validation to evaluate its performance. The model gets scored on three main metrics:
 
 - Precision: Measures the proportion of positive identifications that were actually correct. High precision means the model rarely flags legitimate emails as scams.
 - Recall: Measures the proportion of actual positives that were correctly identified. High recall means the model catches most of the actual scams.
 - F1 score: The harmonic mean of precision and recall, providing a single score that balances both.
 
 The F1 score of the model currently sits at 0.9655.
+
+### Prediction Threshold
+
+The model outputs a probability between 0 and 1. The app only marks an email as a scam when the probability is at least `0.85`. This higher threshold helps reduce false positives, which means fewer legitimate emails get marked as scams.
+
+The dashboard also uses three risk tags:
+
+- `Legit`: The email is treated as safe.
+- `Possible scam`: The email has suspicious signals, but is not strong enough to label as a scam.
+- `Scam`: The email is treated as a confirmed scam and can receive the Gmail scam label.
+
+Users can also correct the model from the dashboard. Each email row has controls to mark the email as `Legit`, `Possible scam`, or `Scam`. This saves a manual risk override, so the dashboard, stats, and reports use the corrected label instead of only trusting the model output.
 
 ## Backend
 
@@ -144,6 +156,10 @@ Stores the result of scanning one Gmail message through the ML model.
 - `is_scam`: Whether the email is a scam (T/F)
 - `labeled_in_gmail`: Whether the email contains the scam tag (T/F)
 - `scanned_at`: Time when the email was scanned by our system
+- `reasons`: List of reasons why the email was flagged as a scam. ex: "Urgency tactic", "Credential request", "Cash incentive", "Lookalike domain", "Suspicious link", "Crypto/investment"
+- `risk_level`: API-only risk tag used by the frontend. Values are `legit`, `possible_scam`, or `scam`
+- `risk_label`: Human-readable version of the risk tag. Values are `Legit`, `Possible scam`, or `Scam`
+- `user_risk_override`: Manual correction selected by the user when the model is wrong
 
 #### Scan Settings
 
@@ -157,7 +173,7 @@ Stores the global settings for the app.
 
 #### Summary Report
 
-Stores the results of a single summary report.
+Stores the results of a single summary report. The reports are generated from scans of the user's inbox. The reports can be filtered by weekly, daily, or monthly. If scanned emails already exist but no reports have been generated yet, the reports API can create the first set of reports from the existing scan results.
 
 - `period`: Daily, weekly, or monthly
 - `generated_at`: When the report was generated
@@ -166,11 +182,18 @@ Stores the results of a single summary report.
 
 ### API Endpoints
 
-GET /api/emails/: Returns all scanned emails; /api/emails?is_scam=true returns only scams.
-GET /api/settings/: Returns current settings.
-PATCH /api/settings/: Updates the certain setting. fields in the request body
-GET /api/reports/: Returns all reports; /api/reports?period=daily returns only daily reports.
-POST /api/scan/: Triggers an on-demand scan of the user's inbox, and returns the number of scanned emails, new emails scanned, and scams found.
+- `GET /api/health/`: Returns whether the backend is running.
+- `GET /api/emails/`: Returns all scanned emails; `/api/emails?risk_level=scam` returns only scam-risk emails.
+- `PATCH /api/emails/<id>/risk/`: Saves a manual correction for an email risk tag.
+- `GET /api/settings/`: Returns current settings.
+- `PATCH /api/settings/`: Updates settings using fields in the request body.
+- `GET /api/reports/`: Returns all reports; `/api/reports?period=daily` returns only daily reports.
+- `POST /api/scan/`: Triggers an on-demand scan of the user's inbox, and returns the number of scanned emails, new emails scanned, and scams found.
+- `GET /api/stats/`: Returns dashboard totals, scam counts, and top scam senders.
+- `GET /api/stats/daily/`: Returns daily scan and scam counts for the last 7 days.
+- `GET /api/stats/senders/`: Returns the most impersonated domain, highest risk sender, and scam trend.
+
+Most API endpoints require the user to be authenticated with Django session authentication.
 
 ## Frontend
 
@@ -181,21 +204,113 @@ The frontend is built with React and Tailwind CSS. It uses Vite for fast develop
 ### Pages
 
 #### Login Page
-Uses Django authentication to log the user into the application
+Django authentication is used to log the user into the dashboard. This is separate from Gmail OAuth. Django authentication protects the dashboard, while Gmail OAuth gives the app permission to read and label Gmail messages of the user's email.
 
 #### Dashboard Page
 The dashboard consists of:
-1. Total number of scanned emails
-2. Number of scam emails
-3. Number of safe emails
-4. The scam rate 
+1. Total number of scanned emails all time
+2. Number of scam emails blocked all time
+3. The threat ratio of scams to scanned emails all time
+4. The next scan time
+5. A scan button for manually scanning Gmail
+6. A filterable and paginated email list
+7. Risk tags for `Legit`, `Possible scam`, and `Scam`
 
 #### Reports Page
+The reports page consists of:
+1. Scam count for the last 7 days
+2. Scam trend compared to the previous week
+3. Most impersonated domain
+4. Highest risk sender
+5. A 7-day chart of scanned emails and scams
+6. Daily, weekly, and monthly report filters
+7. Report cards showing scam totals and top senders
 
 #### Settings Page
+The settings page consists of:
+1. Scan window settings
+2. Scan frequency settings
+3. Notification frequency settings
+4. Email notification settings
+5. Gmail connection metadata
+6. Unsaved changes handling
 
 ### Components
 
 #### Navigation Bar
+The navigation bar lets the user move between Dashboard, Reports, and Settings. It also shows the current connection state of the AI model and includes sign-out controls.
 
-#### 
+#### Security Hero
+
+The security hero shows the current inbox protection state and gives the user a clear button to start a new scan.
+
+#### Filter Bar
+
+The filter bar is used to switch between groups of records, such as all emails, legit emails, possible scam emails, scam emails, or report periods.
+
+#### Report Card
+
+The report card displays one summary report, including the report period, total scams, and top senders.
+
+#### Settings Controls
+
+The settings page uses form controls such as number steppers, selects, toggles, and text inputs to edit scan and notification settings.
+
+## Setup
+
+### Backend Setup
+
+Create a Python virtual environment and install the backend dependencies:
+
+```bash
+python -m venv venv
+venv/bin/pip install -r requirements.txt
+```
+
+Create a `.env` file using `.env.example` as a template. The `.env` file stores local settings such as the Django secret key, allowed hosts, CORS origins, and Gmail OAuth credentials.
+
+Run database migrations:
+
+```bash
+venv/bin/python manage.py migrate
+```
+
+Start the Django backend:
+
+```bash
+venv/bin/python manage.py runserver
+```
+
+### Frontend Setup
+
+Install the frontend dependencies:
+
+```bash
+cd frontend
+npm install
+```
+
+Start the Vite frontend:
+
+```bash
+npm run dev
+```
+
+### ML Artifacts
+
+The app needs both trained ML artifacts before scans can run:
+
+- `ml/model.pt`
+- `ml/vectorizer.json`
+
+These can be generated by running the training script:
+
+```bash
+venv/bin/python -m ml.train
+```
+
+## Security Notes
+
+The app stores secrets and Gmail tokens locally. Files such as `.env`, `token.json`, `credentials.json`, `db.sqlite3`, `ml/model.pt`, and `ml/vectorizer.json` should not be committed to git.
+
+The backend uses authenticated API endpoints, CSRF protection for unsafe requests, configured CORS origins, and JSON-based vectorizer loading to avoid unsafe pickle deserialization at runtime.
