@@ -221,7 +221,7 @@ def _run_report_job() -> None:
         cfg = ScanSettings.load()
         reports = generate_summary_reports(period=cfg.notify_frequency)
         if cfg.notify_via_email and cfg.notify_email_address:
-            target = reports[0] if reports else None
+            target = next((r for r in reports if r.period == cfg.notify_frequency), None)
             if target is not None:
                 send_summary_email(target, cfg.notify_email_address)
         logger.info(

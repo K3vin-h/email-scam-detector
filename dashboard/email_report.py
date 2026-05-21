@@ -33,7 +33,7 @@ def build_text_body(report: SummaryReport) -> str:
     return "\n".join(lines)
 
 
-def _build_html_body(report: SummaryReport) -> str:
+def build_html_body(report: SummaryReport) -> str:
     """HTML email body with styled layout. All user data is escaped."""
     label = _PERIOD_LABELS.get(report.period, report.period)
     generated = report.generated_at.strftime("%Y-%m-%d %H:%M UTC")
@@ -95,7 +95,7 @@ def _build_html_body(report: SummaryReport) -> str:
       </div>
       {senders_section}
       <div style="margin-top:32px;padding-top:24px;border-top:1px solid #e5e7eb;">
-        <a href="{settings.FRONTEND_ORIGIN}"
+        <a href="{html.escape(settings.FRONTEND_ORIGIN)}"
            style="display:inline-block;background:#7c3aed;color:#fff;font-weight:700;
                   font-size:13px;text-decoration:none;padding:11px 22px;border-radius:8px;">
           View Dashboard →
@@ -126,7 +126,7 @@ def send_summary_email(report: SummaryReport, recipient: str) -> bool:
         from_email=settings.EMAIL_FROM,
         to=[recipient],
     )
-    msg.attach_alternative(_build_html_body(report), "text/html")
+    msg.attach_alternative(build_html_body(report), "text/html")
     msg.send()
     # Log domain only — avoid storing full email address as PII in logs
     domain = recipient.split("@")[-1] if "@" in recipient else "?"

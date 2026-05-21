@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from django.db import transaction
 from django.db.models import Count
 from django.utils import timezone
 
@@ -54,8 +55,9 @@ def generate_summary_reports(period: str | None = None) -> list[SummaryReport]:
     if unknown_periods:
         raise ValueError(f"Unknown report period: {unknown_periods[0]}")
 
-    SummaryReport.objects.filter(period__in=periods).delete()
-    return [_build_summary_report(p, now) for p in periods]
+    with transaction.atomic():
+        SummaryReport.objects.filter(period__in=periods).delete()
+        return [_build_summary_report(p, now) for p in periods]
 
 
 def ensure_summary_reports() -> None:

@@ -1013,11 +1013,11 @@ class EmailReportTests(TestCase):
 
     @patch("dashboard.email_report.EmailMultiAlternatives")
     def test_send_summary_email_escapes_sender_in_html(self, MockEmail):
-        from dashboard.email_report import _build_html_body
+        from dashboard.email_report import build_html_body
 
         report = self._make_report()
         report.top_senders = [{"sender": "<script>alert(1)</script>", "count": 1}]
-        html = _build_html_body(report)
+        html = build_html_body(report)
 
         self.assertNotIn("<script>", html)
         self.assertIn("&lt;script&gt;", html)

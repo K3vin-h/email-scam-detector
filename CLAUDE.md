@@ -55,7 +55,7 @@ cd frontend && npm audit
 
 The project is a local macOS app that classifies Gmail emails as scam or legitimate using a PyTorch neural network trained from scratch. See `PLAN.md` for the full 10-phase roadmap.
 
-**Current state:** Phases 1–8 complete. The ML pipeline, Django backend, Gmail OAuth/fetch/labels integration, dashboard models, REST API, scan command, and React/Vite frontend are implemented. Security hardening is also in place: authenticated API defaults, DRF throttling, CSRF/CORS configuration, production security settings, safe scan error responses, and JSON-based vectorizer artifacts instead of pickle loading. Phases 9–10 (background scheduling and generated summary/report automation) remain future work.
+**Current state:** All 10 phases complete. The ML pipeline, Django backend, Gmail OAuth/fetch/labels integration, dashboard models, REST API, scan command, and React/Vite frontend are implemented. Security hardening is also in place: authenticated API defaults, DRF throttling, CSRF/CORS configuration, production security settings, safe scan error responses, and JSON-based vectorizer artifacts instead of pickle loading. Phase 9 added the APScheduler background scheduler with circuit breaker, inter-process file lock, and cross-process settings polling. Phase 10 added scheduled summary report generation, HTML/plain-text email delivery via Django's email backend, a `generate_report --dry-run` management command, and a demo-mode email preview card in the frontend.
 
 ### ML Pipeline (`ml/`)
 
