@@ -38,7 +38,7 @@ describe('ReportsPage', () => {
   it('renders report cards with scam counts', async () => {
     renderPage();
     await waitFor(() => expect(screen.getByText('4')).toBeInTheDocument());
-    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getAllByText('1').length).toBeGreaterThan(0);
   });
 
   it('renders top sender in report card', async () => {

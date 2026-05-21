@@ -106,6 +106,8 @@ The dashboard also uses three risk tags:
 
 Users can also correct the model from the dashboard. Each email row has controls to mark the email as `Legit`, `Possible scam`, or `Scam`. This saves a manual risk override, so the dashboard, stats, and reports use the corrected label instead of only trusting the model output.
 
+Risk corrections update the dashboard immediately, then sync to the backend in the background. This keeps the interface responsive while still preserving the correction in the database.
+
 ## Backend
 
 Django is used as the backend for this project. Its uses consist of:
@@ -171,6 +173,18 @@ Stores the global settings for the app.
 - `notify_via_email`: Whether to send email summaries
 - `notify_email_address`: Email address to send summaries to
 
+#### Background Scheduler
+
+Automatic scans run through APScheduler. The scheduler uses a file lock so only one process can own the `background_scan` job when the app runs with multiple web workers. The lock path defaults to the system temp directory and can be overridden with `SCAM_FILTER_SCHEDULER_LOCK_FILE`.
+
+For production deployments, run the scheduler as a single dedicated process. The scheduler process polls `ScanSettings`, so changes to `scan_frequency_hours` made from the web app are picked up without restarting the scheduler:
+
+```bash
+python manage.py run_scheduler
+```
+
+The scheduler auto-starts in the Django development server child process. Other production processes do not auto-start it unless `SCAM_FILTER_AUTO_START_SCHEDULER=true` is set.
+
 #### Summary Report
 
 Stores the results of a single summary report. The reports are generated from scans of the user's inbox. The reports can be filtered by weekly, daily, or monthly. If scanned emails already exist but no reports have been generated yet, the reports API can create the first set of reports from the existing scan results.
@@ -208,6 +222,7 @@ Django authentication is used to log the user into the dashboard. This is separa
 
 #### Dashboard Page
 The dashboard consists of:
+
 1. Total number of scanned emails all time
 2. Number of scam emails blocked all time
 3. The threat ratio of scams to scanned emails all time
@@ -215,9 +230,15 @@ The dashboard consists of:
 5. A scan button for manually scanning Gmail
 6. A filterable and paginated email list
 7. Risk tags for `Legit`, `Possible scam`, and `Scam`
+8. A risk correction popover for marking an email as `Legit`, `Possible scam`, or `Scam`
+9. Optimistic risk updates so corrections appear immediately before the background refresh finishes
+10. A subtle refresh indicator when email or stats data is updating in the background
+
+The dashboard only shows the full loading state on the first load. Later scans, corrections, and refreshes keep the existing data visible while the app fetches updated results.
 
 #### Reports Page
 The reports page consists of:
+
 1. Scam count for the last 7 days
 2. Scam trend compared to the previous week
 3. Most impersonated domain
@@ -225,9 +246,11 @@ The reports page consists of:
 5. A 7-day chart of scanned emails and scams
 6. Daily, weekly, and monthly report filters
 7. Report cards showing scam totals and top senders
+8. Dark-mode friendly chart hover tooltips and report cards
 
 #### Settings Page
 The settings page consists of:
+
 1. Scan window settings
 2. Scan frequency settings
 3. Notification frequency settings
@@ -247,6 +270,10 @@ The security hero shows the current inbox protection state and gives the user a 
 #### Filter Bar
 
 The filter bar is used to switch between groups of records, such as all emails, legit emails, possible scam emails, scam emails, or report periods.
+
+#### Email Row
+
+The email row shows the sender, subject, snippet, received date, model confidence, risk tag, and classification reasons. The risk tag opens an accessible popover menu where the user can correct the email's risk level. If an email is marked as `Legit`, scam reason tags are hidden because the corrected result is treated as safe.
 
 #### Report Card
 

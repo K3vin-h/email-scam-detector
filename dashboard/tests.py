@@ -680,6 +680,233 @@ class PredictorThresholdTests(TestCase):
         self.assertTrue(is_scam_confidence(0.85))
 
 
+class SchedulerAutostartTests(TestCase):
+    """Tests for dashboard.apps scheduler startup gating."""
+
+    def test_management_commands_do_not_autostart_scheduler(self):
+        from dashboard.apps import _should_start_scheduler
+
+        with patch("dashboard.apps.sys.argv", ["manage.py", "migrate"]):
+            with patch.dict("dashboard.apps.os.environ", {}, clear=True):
+                self.assertFalse(_should_start_scheduler())
+
+    def test_runserver_parent_reloader_does_not_autostart_scheduler(self):
+        from dashboard.apps import _should_start_scheduler
+
+        with patch("dashboard.apps.sys.argv", ["manage.py", "runserver"]):
+            with patch.dict("dashboard.apps.os.environ", {}, clear=True):
+                self.assertFalse(_should_start_scheduler())
+
+    def test_runserver_child_autostarts_scheduler(self):
+        from dashboard.apps import _should_start_scheduler
+
+        with patch("dashboard.apps.sys.argv", ["manage.py", "runserver"]):
+            with patch.dict("dashboard.apps.os.environ", {"RUN_MAIN": "true"}, clear=True):
+                self.assertTrue(_should_start_scheduler())
+
+    def test_env_flag_autostarts_scheduler(self):
+        from dashboard.apps import SCHEDULER_AUTOSTART_ENV, _should_start_scheduler
+
+        with patch("dashboard.apps.sys.argv", ["manage.py", "gunicorn"]):
+            with patch.dict(
+                "dashboard.apps.os.environ",
+                {SCHEDULER_AUTOSTART_ENV: "true"},
+                clear=True,
+            ):
+                self.assertTrue(_should_start_scheduler())
+
+
+class SchedulerStartTests(TestCase):
+    """Tests for dashboard.scheduler.start_scheduler()."""
+
+    def setUp(self):
+        # Reset the singleton before each test so tests are independent
+        import dashboard.scheduler as mod
+        mod.stop_scheduler(wait=False)
+        mod._scheduler = None
+        mod._current_interval_hours = None
+
+    def tearDown(self):
+        # Clean up any real scheduler started during a test
+        import dashboard.scheduler as mod
+        try:
+            mod.stop_scheduler(wait=False)
+        except Exception:
+            mod._scheduler = None
+
+    @patch("dashboard.scheduler.BackgroundScheduler")
+    def test_start_scheduler_creates_and_starts_scheduler(self, MockScheduler):
+        from dashboard.scheduler import start_scheduler, get_scheduler
+
+        start_scheduler(6)
+
+        MockScheduler.assert_called_once_with(daemon=True)
+        self.assertEqual(MockScheduler.return_value.add_job.call_count, 2)
+        MockScheduler.return_value.start.assert_called_once()
+        self.assertIsNotNone(get_scheduler())
+
+    @patch("dashboard.scheduler.BackgroundScheduler")
+    def test_start_scheduler_idempotent(self, MockScheduler):
+        from dashboard.scheduler import start_scheduler
+
+        start_scheduler(6)
+        start_scheduler(12)  # Second call must be ignored
+
+        # Only one Scheduler instance should be created
+        MockScheduler.assert_called_once()
+
+    @patch("dashboard.scheduler._acquire_process_lock")
+    @patch("dashboard.scheduler.BackgroundScheduler")
+    def test_start_scheduler_skips_when_another_process_owns_lock(
+        self,
+        MockScheduler,
+        mock_acquire_process_lock,
+    ):
+        from dashboard.scheduler import start_scheduler, get_scheduler
+
+        mock_acquire_process_lock.return_value = False
+
+        start_scheduler(6)
+
+        MockScheduler.assert_not_called()
+        self.assertIsNone(get_scheduler())
+
+    @patch("dashboard.scheduler.BackgroundScheduler")
+    def test_start_scheduler_uses_provided_interval(self, MockScheduler):
+        from dashboard.scheduler import start_scheduler, SCAN_JOB_ID
+
+        start_scheduler(8)
+
+        scan_call = MockScheduler.return_value.add_job.call_args_list[0]
+        call_kwargs = scan_call[1]
+        self.assertEqual(call_kwargs["id"], SCAN_JOB_ID)
+        # Trigger should be an IntervalTrigger with 8-hour interval
+        trigger = call_kwargs["trigger"]
+        self.assertEqual(trigger.interval.total_seconds(), 8 * 3600)
+
+    @patch("dashboard.scheduler.BackgroundScheduler")
+    def test_start_scheduler_adds_settings_sync_job(self, MockScheduler):
+        from dashboard.scheduler import (
+            SETTINGS_SYNC_INTERVAL_SECONDS,
+            SETTINGS_SYNC_JOB_ID,
+            start_scheduler,
+        )
+
+        start_scheduler(6)
+
+        sync_call = MockScheduler.return_value.add_job.call_args_list[1]
+        call_kwargs = sync_call[1]
+        self.assertEqual(call_kwargs["id"], SETTINGS_SYNC_JOB_ID)
+        trigger = call_kwargs["trigger"]
+        self.assertEqual(trigger.interval.total_seconds(), SETTINGS_SYNC_INTERVAL_SECONDS)
+
+
+class RescheduleTests(TestCase):
+    """Tests for dashboard.scheduler.reschedule_scan()."""
+
+    def setUp(self):
+        import dashboard.scheduler as mod
+        mod.stop_scheduler(wait=False)
+        mod._scheduler = None
+        mod._current_interval_hours = None
+
+    def tearDown(self):
+        import dashboard.scheduler as mod
+        try:
+            mod.stop_scheduler(wait=False)
+        except Exception:
+            mod._scheduler = None
+
+    @patch("dashboard.scheduler.BackgroundScheduler")
+    def test_reschedule_updates_existing_job(self, MockScheduler):
+        from dashboard.scheduler import start_scheduler, reschedule_scan, SCAN_JOB_ID
+
+        start_scheduler(6)
+        reschedule_scan(12)
+
+        MockScheduler.return_value.reschedule_job.assert_called_once()
+        call_args = MockScheduler.return_value.reschedule_job.call_args
+        self.assertEqual(call_args[0][0], SCAN_JOB_ID)
+        new_trigger = call_args[1]["trigger"]
+        self.assertEqual(new_trigger.interval.total_seconds(), 12 * 3600)
+
+    @patch("dashboard.scheduler.reschedule_scan")
+    def test_settings_sync_reschedules_when_persisted_interval_changes(
+        self,
+        mock_reschedule,
+    ):
+        import dashboard.scheduler as mod
+
+        ScanSettings.objects.update_or_create(pk=1, defaults={"scan_frequency_hours": 12})
+        mock_reschedule.reset_mock()
+        mod._scheduler = object()
+        mod._current_interval_hours = 6
+
+        mod._sync_scan_settings()
+
+        mock_reschedule.assert_called_once_with(12)
+
+    def test_reschedule_noop_when_scheduler_not_started(self):
+        from dashboard.scheduler import reschedule_scan
+        # Must not raise even though _scheduler is None
+        reschedule_scan(12)
+
+
+class BackgroundScanJobTests(TestCase):
+    """Tests for dashboard.scheduler._run_scan_job()."""
+
+    @patch("dashboard.scanner.run_scan")
+    def test_run_scan_job_calls_run_scan(self, mock_run_scan):
+        from dashboard.scheduler import _run_scan_job
+
+        mock_run_scan.return_value = {"scanned": 5, "new": 2, "scams_found": 1}
+
+        _run_scan_job()
+
+        mock_run_scan.assert_called_once_with()
+
+    @patch("dashboard.scanner.run_scan")
+    def test_run_scan_job_swallows_exception(self, mock_run_scan):
+        from dashboard.scheduler import _run_scan_job
+
+        mock_run_scan.side_effect = RuntimeError("Gmail API down")
+
+        # Exception must not propagate — scheduler thread must stay alive
+        try:
+            _run_scan_job()
+        except RuntimeError:
+            self.fail("_run_scan_job() should not propagate exceptions")
+
+
+class SignalRescheduleTests(TestCase):
+    """Tests that saving ScanSettings triggers a reschedule."""
+
+    def setUp(self):
+        import dashboard.scheduler as mod
+        mod.stop_scheduler(wait=False)
+        mod._scheduler = None
+        mod._current_interval_hours = None
+
+    def tearDown(self):
+        import dashboard.scheduler as mod
+        try:
+            mod.stop_scheduler(wait=False)
+        except Exception:
+            mod._scheduler = None
+
+    @patch("dashboard.scheduler.reschedule_scan")
+    def test_settings_save_triggers_reschedule(self, mock_reschedule):
+        settings_obj = ScanSettings.load()
+        # ScanSettings.load() saves the default row, firing the signal once.
+        # Reset so we only assert on the explicit frequency change below.
+        mock_reschedule.reset_mock()
+
+        settings_obj.scan_frequency_hours = 12
+        settings_obj.save()
+
+        mock_reschedule.assert_called_once_with(12)
+
+
 class RiskLevelTests(TestCase):
     def test_trusted_adobe_sender_is_legit_even_with_high_model_confidence(self):
         self.assertEqual(
