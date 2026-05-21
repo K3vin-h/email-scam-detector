@@ -177,13 +177,27 @@ Stores the global settings for the app.
 
 Automatic scans run through APScheduler. The scheduler uses a file lock so only one process can own the `background_scan` job when the app runs with multiple web workers. The lock path defaults to the system temp directory and can be overridden with `SCAM_FILTER_SCHEDULER_LOCK_FILE`.
 
-For production deployments, run the scheduler as a single dedicated process. The scheduler process polls `ScanSettings`, so changes to `scan_frequency_hours` made from the web app are picked up without restarting the scheduler:
+For local personal-project use, starting the normal Django server is enough. The Django development server child process starts the background scheduler automatically:
+
+```bash
+python manage.py runserver
+```
+
+While the backend is running, the scheduler:
+
+- scans Gmail on the `scan_frequency_hours` interval saved in Settings
+- generates the configured summary report period automatically
+- sends the report email when email reports are enabled and a recipient address is saved
+
+You only need `python manage.py generate_report` when you want to send a report immediately for testing.
+
+For production deployments, either run the scheduler as a single dedicated process or explicitly opt a single server process into scheduler ownership. The scheduler process polls `ScanSettings`, so changes to `scan_frequency_hours` and `notify_frequency` made from the web app are picked up without restarting the scheduler:
 
 ```bash
 python manage.py run_scheduler
 ```
 
-The scheduler auto-starts in the Django development server child process. Other production processes do not auto-start it unless `SCAM_FILTER_AUTO_START_SCHEDULER=true` is set.
+Other production processes do not auto-start it unless `SCAM_FILTER_AUTO_START_SCHEDULER=true` is set.
 
 #### Summary Report
 
