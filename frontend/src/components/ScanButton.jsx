@@ -1,11 +1,30 @@
-import { useState } from 'react';
-import { Loader, Scan } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { AlertCircle, CheckCircle, Loader, Scan } from 'lucide-react';
 import { api } from '../api/client.js';
 
 export function ScanButton({ onComplete }) {
   const [scanning, setScanning] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [popupPos, setPopupPos] = useState(null);
+  const dismissRef = useRef(null);
+  const buttonRef = useRef(null);
+
+  useEffect(() => {
+    if (!result && !error) return;
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setPopupPos({ top: rect.bottom + 10, right: window.innerWidth - rect.right });
+    }
+    clearTimeout(dismissRef.current);
+    dismissRef.current = setTimeout(() => {
+      setResult(null);
+      setError(null);
+      setPopupPos(null);
+    }, 4000);
+    return () => clearTimeout(dismissRef.current);
+  }, [result, error]);
 
   const handleScan = async () => {
     setScanning(true);
@@ -22,9 +41,44 @@ export function ScanButton({ onComplete }) {
     }
   };
 
+  const popup =
+    (result || error) && popupPos
+      ? createPortal(
+          <div
+            className="fixed z-[9999] w-56 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xl shadow-slate-900/10 dark:shadow-slate-900/50 overflow-hidden"
+            style={{ top: popupPos.top, right: popupPos.right }}
+          >
+            {result && (
+              <div className="flex items-start gap-3 px-3.5 py-3">
+                <CheckCircle size={16} strokeWidth={2} className="mt-0.5 shrink-0 text-emerald-500" />
+                <div>
+                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Scan complete</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    {result.new} new ·{' '}
+                    <span className="font-semibold text-rose-500 dark:text-rose-400">
+                      {result.scams_found} scam{result.scams_found !== 1 ? 's' : ''}
+                    </span>
+                  </p>
+                </div>
+              </div>
+            )}
+            {error && (
+              <div className="flex items-start gap-3 px-3.5 py-3">
+                <AlertCircle size={16} strokeWidth={2} className="mt-0.5 shrink-0 text-rose-500" />
+                <div>
+                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Scan failed</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{error}</p>
+                </div>
+              </div>
+            )}
+          </div>,
+          document.body
+        )
+      : null;
+
   return (
-    <div className="flex flex-col items-end gap-2 shrink-0">
-      <div className="relative inline-flex">
+    <div className="shrink-0">
+      <div className="relative inline-flex" ref={buttonRef}>
         {scanning && (
           <span className="absolute inset-0 rounded-full bg-indigo-500/30 animate-ping" aria-hidden="true" />
         )}
@@ -39,15 +93,7 @@ export function ScanButton({ onComplete }) {
           {scanning ? 'Scanning…' : 'Scan Now'}
         </button>
       </div>
-      {result && (
-        <p className="text-xs text-slate-600">
-          {result.new} new ·{' '}
-          <span className="text-rose-600 font-semibold">
-            {result.scams_found} scam{result.scams_found !== 1 ? 's' : ''}
-          </span>
-        </p>
-      )}
-      {error && <p className="text-xs text-rose-600">{error}</p>}
+      {popup}
     </div>
   );
 }

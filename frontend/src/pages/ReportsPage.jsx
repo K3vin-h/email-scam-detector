@@ -82,7 +82,7 @@ function DetectionChart({ data, loading }) {
         </div>
       </div>
 
-      <div className="relative flex items-end gap-1.5 sm:gap-2 h-40 rounded-xl border border-slate-200/70 dark:border-slate-700/60 bg-slate-50/60 dark:bg-slate-900/50 px-4 pt-5 pb-3 overflow-hidden">
+      <div className="relative flex items-end gap-2 sm:gap-3 h-56 rounded-xl border border-slate-200/70 dark:border-slate-700/60 bg-slate-50/60 dark:bg-slate-900/50 px-4 pt-5 pb-3">
         {/* grid lines */}
         <div className="absolute inset-0 flex flex-col justify-between pointer-events-none px-4">
           {[0, 1, 2, 3, 4].map((i) => (
@@ -95,10 +95,10 @@ function DetectionChart({ data, loading }) {
           return (
             <div
               key={d.date}
-              className="group relative z-10 flex-1 h-full flex flex-col justify-end gap-1 min-w-0"
+              className="group relative z-10 flex-1 h-full flex flex-col justify-end min-w-0"
             >
               {/* hover tooltip */}
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
                 <div className="bg-slate-900 dark:bg-slate-800 text-white dark:text-slate-100 text-[10px] font-medium px-2.5 py-1.5 rounded-lg whitespace-nowrap shadow-xl dark:border dark:border-slate-700">
                   <span className="text-slate-300">{d.day}:</span>{' '}
                   <span className="text-rose-300">{d.scams} scam{d.scams !== 1 ? 's' : ''}</span>
@@ -107,11 +107,11 @@ function DetectionChart({ data, loading }) {
               </div>
               {/* bar */}
               <div
-                className="relative mx-auto w-full max-w-9 rounded-t-md overflow-hidden bg-slate-200/80 dark:bg-slate-700/70 group-hover:bg-slate-300/80 dark:group-hover:bg-slate-600/70 transition-colors"
+                className="relative w-full rounded-t-md overflow-hidden bg-slate-300 dark:bg-slate-600 group-hover:bg-slate-400/80 dark:group-hover:bg-slate-500 transition-colors"
                 style={{ height: `${scannedH}%`, minHeight: '4px' }}
               >
                 <div
-                  className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-rose-500 to-rose-400 dark:from-rose-500 dark:to-rose-400 rounded-t-sm"
+                  className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-rose-500 via-rose-400 to-pink-400 rounded-t-sm"
                   style={{ height: scannedH ? `${(scamH / scannedH) * 100}%` : '0%' }}
                 />
               </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Bell, Calendar, Check, Eye, Loader, Lock, Mail, X } from 'lucide-react';
+import { AlertCircle, Bell, Calendar, Check, Eye, Loader, Lock, Mail, X } from 'lucide-react';
 import { useSettings } from '../hooks/useSettings.js';
 import { NavBar } from '../components/NavBar.jsx';
 import { MobileTabBar } from '../components/MobileTabBar.jsx';
@@ -333,21 +333,22 @@ export function SettingsPage() {
         </GlassCard>
 
         {saveError && (
-          <div role="alert" className="rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-700">
-            Failed to save settings. Please try again.
+          <div role="alert" className="rounded-xl border border-rose-200 dark:border-rose-800/50 bg-rose-50 dark:bg-rose-950/30 px-4 py-3 flex items-center gap-3">
+            <AlertCircle size={16} strokeWidth={2} className="shrink-0 text-rose-500" />
+            <p className="text-sm font-medium text-rose-700 dark:text-rose-400">Failed to save settings. Please try again.</p>
           </div>
         )}
       </main>
 
       {saved && (
-        <div role="status" className="fixed right-4 top-6 z-50 max-w-sm rounded-2xl border border-emerald-200 bg-emerald-50/95 px-4 py-3 text-sm text-emerald-800 shadow-xl shadow-emerald-900/10 backdrop-blur-md">
+        <div role="status" className="fixed right-4 top-6 z-50 max-w-xs rounded-2xl border border-slate-200/80 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 shadow-2xl shadow-slate-900/15 dark:shadow-slate-900/50 backdrop-blur-sm">
           <div className="flex items-center gap-3">
-            <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 text-white">
+            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white">
               <Check size={14} strokeWidth={3} />
             </span>
             <div>
-              <p className="font-semibold">Settings saved</p>
-              <p className="text-xs text-emerald-700/80">Your changes have been applied.</p>
+              <p className="text-sm font-semibold text-slate-900 dark:text-white">Settings saved</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Your changes have been applied.</p>
             </div>
           </div>
         </div>
