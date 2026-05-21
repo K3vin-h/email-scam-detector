@@ -1,6 +1,6 @@
 import { useEmails } from '../hooks/useEmails.js';
 import { useStats } from '../hooks/useStats.js';
-import { isDemoMode, DEMO_KEY } from '../hooks/useAuth.js';
+import { clearDemoMode, isDemoMode } from '../hooks/useAuth.js';
 import { api } from '../api/client.js';
 import { NavBar } from '../components/NavBar.jsx';
 import { MobileTabBar } from '../components/MobileTabBar.jsx';
@@ -15,7 +15,7 @@ import { FlaskConical, X } from 'lucide-react';
 
 function DemoBanner() {
   function exitDemo() {
-    localStorage.removeItem(DEMO_KEY);
+    clearDemoMode();
     window.location.href = '/login';
   }
   return (

@@ -1,10 +1,10 @@
 import { Lock, ShieldCheck, FlaskConical } from 'lucide-react';
 import { PageShell } from '../components/PageShell.jsx';
 import { GlassCard } from '../components/GlassCard.jsx';
-import { DEMO_KEY } from '../hooks/useAuth.js';
+import { clearDemoMode, enterDemoMode } from '../hooks/useAuth.js';
 
 function enterDemo() {
-  localStorage.setItem(DEMO_KEY, 'true');
+  enterDemoMode();
   window.location.href = '/';
 }
 
@@ -41,7 +41,7 @@ export function LoginPage() {
 
             <a
               href="/admin/login/?next=/"
-              onClick={() => localStorage.removeItem(DEMO_KEY)}
+              onClick={clearDemoMode}
               className="mt-8 inline-flex items-center justify-center gap-3 w-full px-5 py-3 rounded-full font-semibold text-sm text-slate-800 bg-white/90 border border-slate-200 shadow-sm shadow-slate-900/5 backdrop-blur-sm transition-all hover:border-indigo-200 hover:bg-white hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 active:scale-95 dark:border-white/10 dark:bg-slate-900/80 dark:text-slate-100 dark:shadow-indigo-950/30 dark:hover:border-indigo-400/40 dark:hover:bg-slate-800/90 dark:focus-visible:outline-indigo-300"
             >
               <GoogleIcon />

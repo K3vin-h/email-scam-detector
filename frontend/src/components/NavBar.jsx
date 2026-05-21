@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { ShieldCheck, LogOut, User } from 'lucide-react';
 import { api } from '../api/client.js';
+import { clearDemoMode } from '../hooks/useAuth.js';
 import { ThemeToggle } from './ThemeToggle.jsx';
 import { useUnsavedChanges } from './UnsavedChangesContext.jsx';
 
@@ -10,6 +11,7 @@ function getCsrfToken() {
 }
 
 function handleSignOut() {
+  clearDemoMode();
   fetch('/admin/logout/', {
     method: 'POST',
     credentials: 'include',

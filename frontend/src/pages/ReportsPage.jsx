@@ -4,7 +4,7 @@ import { useReports } from '../hooks/useReports.js';
 import { useStats } from '../hooks/useStats.js';
 import { useDailyStats } from '../hooks/useDailyStats.js';
 import { useSenderStats } from '../hooks/useSenderStats.js';
-import { isDemoMode, DEMO_KEY } from '../hooks/useAuth.js';
+import { clearDemoMode, isDemoMode } from '../hooks/useAuth.js';
 import { NavBar } from '../components/NavBar.jsx';
 import { MobileTabBar } from '../components/MobileTabBar.jsx';
 import { PageShell } from '../components/PageShell.jsx';
@@ -22,7 +22,7 @@ const PERIOD_OPTIONS = [
 
 function DemoBanner() {
   function exitDemo() {
-    localStorage.removeItem(DEMO_KEY);
+    clearDemoMode();
     window.location.href = '/login';
   }
   return (

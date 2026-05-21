@@ -3,6 +3,8 @@ import { api } from '../api/client.js';
 
 export const DEMO_KEY = 'scamfilter_demo';
 export const isDemoMode = () => localStorage.getItem(DEMO_KEY) === 'true';
+export const enterDemoMode = () => localStorage.setItem(DEMO_KEY, 'true');
+export const clearDemoMode = () => localStorage.removeItem(DEMO_KEY);
 
 export function useAuth() {
   const demo = isDemoMode();
