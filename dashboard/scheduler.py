@@ -9,19 +9,31 @@ The scheduler is a module-level singleton started once at Django boot
 automatically when the process exits via APScheduler's atexit hook.
 """
 import logging
+import os
+import tempfile
 import threading
+from pathlib import Path
 from typing import Optional
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - fcntl is unavailable on Windows
+    fcntl = None
+
 logger = logging.getLogger(__name__)
 
-# One scheduler per process — created in start_scheduler(), reused everywhere
+# One scheduler per process - created in start_scheduler(), reused everywhere
 _scheduler: Optional[BackgroundScheduler] = None
+_scheduler_lock_file: Optional[object] = None
 
 # Lock prevents double-start under threaded WSGI servers (e.g. gunicorn --threads N)
 _scheduler_lock = threading.Lock()
+
+# File lock prevents duplicate scheduler ownership across worker processes.
+SCHEDULER_LOCK_FILE_ENV = "SCAM_FILTER_SCHEDULER_LOCK_FILE"
 
 # Stable job ID so we can reschedule without restarting the scheduler
 SCAN_JOB_ID = "background_scan"
@@ -35,6 +47,60 @@ MAX_INTERVAL_HOURS = 168  # 1 week
 # so a permanently broken OAuth token does not spam logs endlessly
 MAX_CONSECUTIVE_FAILURES = 3
 _consecutive_failures = 0
+
+
+def _scheduler_lock_path() -> Path:
+    """Return the inter-process lock file path."""
+    configured_path = os.environ.get(SCHEDULER_LOCK_FILE_ENV)
+    if configured_path:
+        return Path(configured_path)
+    return Path(tempfile.gettempdir()) / "scam-filter-background-scheduler.lock"
+
+
+def _acquire_process_lock() -> bool:
+    """Acquire the non-blocking process lock for the scheduler owner."""
+    global _scheduler_lock_file
+
+    if fcntl is None:
+        logger.warning(
+            "fcntl is unavailable; scheduler cannot enforce an inter-process lock"
+        )
+        return False
+
+    lock_path = _scheduler_lock_path()
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_file = lock_path.open("w")
+
+    try:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        lock_file.close()
+        logger.info(
+            "Background scheduler already owned by another process; skipping start"
+        )
+        return False
+
+    lock_file.seek(0)
+    lock_file.truncate()
+    lock_file.write(str(os.getpid()))
+    lock_file.flush()
+    _scheduler_lock_file = lock_file
+    return True
+
+
+def _release_process_lock() -> None:
+    """Release the scheduler process lock if this process owns it."""
+    global _scheduler_lock_file
+
+    if _scheduler_lock_file is None:
+        return
+
+    try:
+        if fcntl is not None:
+            fcntl.flock(_scheduler_lock_file.fileno(), fcntl.LOCK_UN)
+    finally:
+        _scheduler_lock_file.close()
+        _scheduler_lock_file = None
 
 
 def _clamp_hours(hours: int) -> int:
@@ -84,6 +150,8 @@ def start_scheduler(scan_frequency_hours: int) -> None:
 
     Idempotent: if the scheduler is already running this is a no-op.
     A threading lock prevents double-start under multi-threaded WSGI servers.
+    A non-blocking file lock prevents separate worker processes from each
+    running their own copy of the scheduled scan.
     APScheduler registers an atexit handler for graceful shutdown automatically.
 
     Args:
@@ -99,15 +167,23 @@ def start_scheduler(scan_frequency_hours: int) -> None:
             logger.debug("Scheduler already running — skipping start")
             return
 
+        if not _acquire_process_lock():
+            return
+
         _scheduler = BackgroundScheduler(daemon=True)
-        _scheduler.add_job(
-            _run_scan_job,
-            trigger=IntervalTrigger(hours=hours),
-            id=SCAN_JOB_ID,
-            replace_existing=True,
-            max_instances=1,  # prevent scan overlap if one run is slow
-        )
-        _scheduler.start()
+        try:
+            _scheduler.add_job(
+                _run_scan_job,
+                trigger=IntervalTrigger(hours=hours),
+                id=SCAN_JOB_ID,
+                replace_existing=True,
+                max_instances=1,  # prevent scan overlap if one run is slow
+            )
+            _scheduler.start()
+        except Exception:
+            _scheduler = None
+            _release_process_lock()
+            raise
 
     logger.info(
         "Background scheduler started — scanning every %d hour(s)",
@@ -148,3 +224,15 @@ def reschedule_scan(scan_frequency_hours: int) -> None:
 def get_scheduler() -> Optional[BackgroundScheduler]:
     """Return the active scheduler instance, or None if not yet started."""
     return _scheduler
+
+
+def stop_scheduler(wait: bool = False) -> None:
+    """Stop the active scheduler and release the process lock."""
+    global _scheduler
+
+    try:
+        if _scheduler is not None:
+            _scheduler.shutdown(wait=wait)
+    finally:
+        _scheduler = None
+        _release_process_lock()

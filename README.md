@@ -173,6 +173,16 @@ Stores the global settings for the app.
 - `notify_via_email`: Whether to send email summaries
 - `notify_email_address`: Email address to send summaries to
 
+#### Background Scheduler
+
+Automatic scans run through APScheduler. The scheduler uses a file lock so only one process can own the `background_scan` job when the app runs with multiple web workers. The lock path defaults to the system temp directory and can be overridden with `SCAM_FILTER_SCHEDULER_LOCK_FILE`.
+
+For production deployments, run the scheduler as a single dedicated process:
+
+```bash
+python manage.py run_scheduler
+```
+
 #### Summary Report
 
 Stores the results of a single summary report. The reports are generated from scans of the user's inbox. The reports can be filtered by weekly, daily, or monthly. If scanned emails already exist but no reports have been generated yet, the reports API can create the first set of reports from the existing scan results.

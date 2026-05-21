@@ -686,16 +686,15 @@ class SchedulerStartTests(TestCase):
     def setUp(self):
         # Reset the singleton before each test so tests are independent
         import dashboard.scheduler as mod
+        mod.stop_scheduler(wait=False)
         mod._scheduler = None
 
     def tearDown(self):
         # Clean up any real scheduler started during a test
         import dashboard.scheduler as mod
-        if mod._scheduler is not None:
-            try:
-                mod._scheduler.shutdown(wait=False)
-            except Exception:
-                pass
+        try:
+            mod.stop_scheduler(wait=False)
+        except Exception:
             mod._scheduler = None
 
     @patch("dashboard.scheduler.BackgroundScheduler")
@@ -719,6 +718,22 @@ class SchedulerStartTests(TestCase):
         # Only one Scheduler instance should be created
         MockScheduler.assert_called_once()
 
+    @patch("dashboard.scheduler._acquire_process_lock")
+    @patch("dashboard.scheduler.BackgroundScheduler")
+    def test_start_scheduler_skips_when_another_process_owns_lock(
+        self,
+        MockScheduler,
+        mock_acquire_process_lock,
+    ):
+        from dashboard.scheduler import start_scheduler, get_scheduler
+
+        mock_acquire_process_lock.return_value = False
+
+        start_scheduler(6)
+
+        MockScheduler.assert_not_called()
+        self.assertIsNone(get_scheduler())
+
     @patch("dashboard.scheduler.BackgroundScheduler")
     def test_start_scheduler_uses_provided_interval(self, MockScheduler):
         from dashboard.scheduler import start_scheduler, SCAN_JOB_ID
@@ -737,15 +752,14 @@ class RescheduleTests(TestCase):
 
     def setUp(self):
         import dashboard.scheduler as mod
+        mod.stop_scheduler(wait=False)
         mod._scheduler = None
 
     def tearDown(self):
         import dashboard.scheduler as mod
-        if mod._scheduler is not None:
-            try:
-                mod._scheduler.shutdown(wait=False)
-            except Exception:
-                pass
+        try:
+            mod.stop_scheduler(wait=False)
+        except Exception:
             mod._scheduler = None
 
     @patch("dashboard.scheduler.BackgroundScheduler")
@@ -798,15 +812,14 @@ class SignalRescheduleTests(TestCase):
 
     def setUp(self):
         import dashboard.scheduler as mod
+        mod.stop_scheduler(wait=False)
         mod._scheduler = None
 
     def tearDown(self):
         import dashboard.scheduler as mod
-        if mod._scheduler is not None:
-            try:
-                mod._scheduler.shutdown(wait=False)
-            except Exception:
-                pass
+        try:
+            mod.stop_scheduler(wait=False)
+        except Exception:
             mod._scheduler = None
 
     @patch("dashboard.scheduler.reschedule_scan")
