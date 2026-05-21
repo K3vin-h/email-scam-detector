@@ -35,9 +35,10 @@ _scheduler_lock = threading.Lock()
 # File lock prevents duplicate scheduler ownership across worker processes.
 SCHEDULER_LOCK_FILE_ENV = "SCAM_FILTER_SCHEDULER_LOCK_FILE"
 
-# Stable job ID so we can reschedule without restarting the scheduler
+# Stable job IDs so we can reschedule without restarting the scheduler
 SCAN_JOB_ID = "background_scan"
 SETTINGS_SYNC_JOB_ID = "settings_sync"
+REPORT_JOB_ID = "report_generation"
 SETTINGS_SYNC_INTERVAL_SECONDS = 60
 
 # Interval bounds — enforced here independently of model-layer validation
@@ -45,11 +46,19 @@ SETTINGS_SYNC_INTERVAL_SECONDS = 60
 MIN_INTERVAL_HOURS = 1
 MAX_INTERVAL_HOURS = 168  # 1 week
 
+# Maps ScanSettings.notify_frequency choices to hours for the report job trigger
+_NOTIFY_FREQUENCY_TO_HOURS: dict[str, int] = {
+    "daily": 24,
+    "weekly": 168,
+    "monthly": 720,
+}
+
 # Circuit breaker: pause the scheduler after this many consecutive failures
 # so a permanently broken OAuth token does not spam logs endlessly
 MAX_CONSECUTIVE_FAILURES = 3
 _consecutive_failures = 0
 _current_interval_hours: Optional[int] = None
+_current_notify_frequency: Optional[str] = None
 
 
 def _scheduler_lock_path() -> Path:
@@ -123,23 +132,42 @@ def _load_scan_frequency_hours(default: int = 6) -> int:
         return _clamp_hours(default)
 
 
+def _load_notify_frequency(default: str = "weekly") -> str:
+    """Read the persisted notification frequency, falling back when DB is unavailable."""
+    from django.db import OperationalError, ProgrammingError
+    from dashboard.models import ScanSettings
+
+    try:
+        settings_obj = ScanSettings.objects.get(pk=1)
+        return settings_obj.notify_frequency
+    except (ScanSettings.DoesNotExist, OperationalError, ProgrammingError):
+        return default
+
+
 def _sync_scan_settings() -> None:
     """Poll persisted settings so the scheduler owner sees cross-process changes."""
-    global _current_interval_hours
+    global _current_interval_hours, _current_notify_frequency
 
     if _scheduler is None:
         return
 
     hours = _load_scan_frequency_hours(default=_current_interval_hours or 6)
-    if hours == _current_interval_hours:
-        return
+    if hours != _current_interval_hours:
+        logger.info(
+            "Detected scan frequency change: %s -> %d hour(s)",
+            _current_interval_hours,
+            hours,
+        )
+        reschedule_scan(hours)
 
-    logger.info(
-        "Detected scan frequency change: %s -> %d hour(s)",
-        _current_interval_hours,
-        hours,
-    )
-    reschedule_scan(hours)
+    frequency = _load_notify_frequency(default=_current_notify_frequency or "weekly")
+    if frequency != _current_notify_frequency:
+        logger.info(
+            "Detected notify frequency change: %s -> %s",
+            _current_notify_frequency,
+            frequency,
+        )
+        reschedule_report_job(frequency)
 
 
 def _run_scan_job() -> None:
@@ -179,6 +207,28 @@ def _run_scan_job() -> None:
                 _scheduler.pause_job(SCAN_JOB_ID)
 
 
+def _run_report_job() -> None:
+    """Generate summary reports and email the one matching notify_frequency.
+
+    Exceptions are caught and logged so the scheduler thread stays alive.
+    Email is only sent if notify_via_email=True and notify_email_address is set.
+    """
+    from dashboard.email_report import send_summary_email
+    from dashboard.models import ScanSettings
+    from dashboard.reports import generate_summary_reports
+
+    try:
+        reports = generate_summary_reports()
+        cfg = ScanSettings.load()
+        if cfg.notify_via_email and cfg.notify_email_address:
+            target = next((r for r in reports if r.period == cfg.notify_frequency), None)
+            if target is not None:
+                send_summary_email(target, cfg.notify_email_address)
+        logger.info("Report generation job complete (%d reports)", len(reports))
+    except Exception as exc:
+        logger.error("Report generation job failed: %s", exc, exc_info=True)
+
+
 def start_scheduler(scan_frequency_hours: int) -> None:
     """Create and start the background scheduler.
 
@@ -192,7 +242,7 @@ def start_scheduler(scan_frequency_hours: int) -> None:
         scan_frequency_hours: How often to run the background scan.
                               Clamped to [1, 168] hours regardless of input.
     """
-    global _scheduler, _current_interval_hours
+    global _scheduler, _current_interval_hours, _current_notify_frequency
 
     hours = _clamp_hours(scan_frequency_hours)
 
@@ -203,6 +253,15 @@ def start_scheduler(scan_frequency_hours: int) -> None:
 
         if not _acquire_process_lock():
             return
+
+        notify_frequency = _load_notify_frequency()
+        report_hours = _NOTIFY_FREQUENCY_TO_HOURS.get(notify_frequency)
+        if report_hours is None:
+            logger.warning(
+                "Unknown notify_frequency %r — defaulting report job to 24 hour(s)",
+                notify_frequency,
+            )
+            report_hours = 24
 
         _scheduler = BackgroundScheduler(daemon=True)
         try:
@@ -220,17 +279,29 @@ def start_scheduler(scan_frequency_hours: int) -> None:
                 replace_existing=True,
                 max_instances=1,
             )
+            _scheduler.add_job(
+                _run_report_job,
+                trigger=IntervalTrigger(hours=report_hours),
+                id=REPORT_JOB_ID,
+                replace_existing=True,
+                max_instances=1,
+            )
             _scheduler.start()
             _current_interval_hours = hours
+            _current_notify_frequency = notify_frequency
         except Exception:
             _scheduler = None
             _current_interval_hours = None
+            _current_notify_frequency = None
             _release_process_lock()
             raise
 
     logger.info(
-        "Background scheduler started — scanning every %d hour(s)",
+        "Background scheduler started — scanning every %d hour(s), "
+        "reports every %d hour(s) (%s)",
         hours,
+        report_hours,
+        notify_frequency,
     )
 
 
@@ -271,6 +342,43 @@ def reschedule_scan(scan_frequency_hours: int) -> None:
     )
 
 
+def reschedule_report_job(frequency: str) -> None:
+    """Update the report generation interval to match a new notify_frequency.
+
+    Called by _sync_scan_settings() when a cross-process settings change is
+    detected. No-ops if the scheduler has not been started yet.
+
+    Args:
+        frequency: One of 'daily', 'weekly', 'monthly'.
+    """
+    global _current_notify_frequency
+
+    if _scheduler is None:
+        logger.debug("Scheduler not running — report reschedule is a no-op")
+        return
+
+    if frequency == _current_notify_frequency:
+        logger.debug("Report frequency already set to %s", frequency)
+        return
+
+    report_hours = _NOTIFY_FREQUENCY_TO_HOURS.get(frequency)
+    if report_hours is None:
+        logger.warning(
+            "Unknown notify_frequency %r — defaulting report job to 24 hour(s)", frequency
+        )
+        report_hours = 24
+    _scheduler.reschedule_job(
+        REPORT_JOB_ID,
+        trigger=IntervalTrigger(hours=report_hours),
+    )
+    _current_notify_frequency = frequency
+    logger.info(
+        "Rescheduled report generation to every %d hour(s) (%s)",
+        report_hours,
+        frequency,
+    )
+
+
 def get_scheduler() -> Optional[BackgroundScheduler]:
     """Return the active scheduler instance, or None if not yet started."""
     return _scheduler
@@ -278,7 +386,7 @@ def get_scheduler() -> Optional[BackgroundScheduler]:
 
 def stop_scheduler(wait: bool = False) -> None:
     """Stop the active scheduler and release the process lock."""
-    global _scheduler, _current_interval_hours
+    global _scheduler, _current_interval_hours, _current_notify_frequency
 
     try:
         if _scheduler is not None:
@@ -286,4 +394,5 @@ def stop_scheduler(wait: bool = False) -> None:
     finally:
         _scheduler = None
         _current_interval_hours = None
+        _current_notify_frequency = None
         _release_process_lock()
