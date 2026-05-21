@@ -2,6 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertCircle, CheckCircle, Loader, Scan } from 'lucide-react';
 import { api } from '../api/client.js';
+import { isDemoMode } from '../hooks/useAuth.js';
+
+const DEMO_SCAN_RESULT = {
+  scanned: 12,
+  new: 0,
+  scams_found: 0,
+};
 
 export function ScanButton({ onComplete }) {
   const [scanning, setScanning] = useState(false);
@@ -31,6 +38,11 @@ export function ScanButton({ onComplete }) {
     setResult(null);
     setError(null);
     try {
+      if (isDemoMode()) {
+        setResult(DEMO_SCAN_RESULT);
+        onComplete?.();
+        return;
+      }
       const data = await api.triggerScan();
       setResult(data);
       onComplete?.();

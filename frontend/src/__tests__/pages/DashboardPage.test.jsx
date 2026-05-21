@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { DashboardPage } from '../../pages/DashboardPage.jsx';
 import { api } from '../../api/client.js';
+import { DEMO_KEY } from '../../hooks/useAuth.js';
 
 vi.mock('../../api/client.js');
 
@@ -62,6 +63,8 @@ const renderPage = () =>
   render(<MemoryRouter><DashboardPage /></MemoryRouter>);
 
 beforeEach(() => {
+  vi.clearAllMocks();
+  localStorage.clear();
   api.getHealth.mockResolvedValue({ status: 'ok' });
   api.getStats.mockResolvedValue(mockStats);
   api.getEmails.mockResolvedValue(mockEmailsPage);
@@ -105,6 +108,18 @@ describe('DashboardPage', () => {
     fireEvent.click(screen.getByText('Scan Now'));
     await waitFor(() => expect(api.triggerScan).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByText(/1 scam/)).toBeInTheDocument());
+  });
+
+  it('scan button uses a demo result without calling the scan API in demo mode', async () => {
+    localStorage.setItem(DEMO_KEY, 'true');
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Scan Now')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Scan Now'));
+
+    expect(api.triggerScan).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByText('Scan complete')).toBeInTheDocument());
+    expect(screen.getByText(/0 scams/)).toBeInTheDocument();
   });
 
   it('refreshes stats and emails after a successful scan', async () => {
