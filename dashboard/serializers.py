@@ -1,9 +1,13 @@
 from rest_framework import serializers
 
 from dashboard.models import EmailRecord, ScanSettings, SummaryReport
+from dashboard.risk import risk_label, risk_level_for_email
 
 
 class EmailRecordSerializer(serializers.ModelSerializer):
+    risk_level = serializers.SerializerMethodField()
+    risk_label = serializers.SerializerMethodField()
+
     class Meta:
         model = EmailRecord
         fields = [
@@ -17,8 +21,23 @@ class EmailRecordSerializer(serializers.ModelSerializer):
             "is_scam",
             "labeled_in_gmail",
             "scanned_at",
+            "reasons",
+            "user_risk_override",
+            "risk_level",
+            "risk_label",
         ]
         read_only_fields = fields
+
+    def get_risk_level(self, obj):
+        return risk_level_for_email(
+            sender=obj.sender,
+            confidence=obj.confidence,
+            is_scam=obj.is_scam,
+            user_risk_override=obj.user_risk_override,
+        )
+
+    def get_risk_label(self, obj):
+        return risk_label(self.get_risk_level(obj))
 
 
 class ScanSettingsSerializer(serializers.ModelSerializer):

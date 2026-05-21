@@ -17,6 +17,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
@@ -36,6 +37,7 @@ SCOPES = [
 
 logger = logging.getLogger(__name__)
 _GOOGLE_TOKEN_URI = "https://oauth2.googleapis.com/" + "token"
+_FRONTEND_ORIGIN_SESSION_KEY = "oauth_frontend_origin"
 
 
 def get_credentials() -> Credentials | None:
@@ -120,6 +122,64 @@ def _write_token_file(token_path: Path, token_json: str) -> None:
     os.chmod(token_path, 0o600)
 
 
+def _origin_from_url(url: str | None) -> str | None:
+    """Return the scheme://host[:port] origin for a URL or origin string."""
+    if not url:
+        return None
+
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        return None
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def _allowed_frontend_origins() -> set[str]:
+    """Return configured frontend origins that may receive OAuth redirects."""
+    origins = {
+        origin
+        for origin in settings.CORS_ALLOWED_ORIGINS
+        if _origin_from_url(origin) == origin
+    }
+    frontend_origin = _origin_from_url(settings.FRONTEND_ORIGIN)
+    if frontend_origin:
+        origins.add(frontend_origin)
+    return origins
+
+
+def _is_allowed_frontend_origin(origin: str | None) -> bool:
+    return origin in _allowed_frontend_origins()
+
+
+def _get_frontend_origin(request: HttpRequest) -> str | None:
+    """Find the active trusted frontend origin for the current OAuth request."""
+    request_origin = _origin_from_url(request.headers.get("Origin"))
+    if _is_allowed_frontend_origin(request_origin):
+        return request_origin
+
+    referrer_origin = _origin_from_url(request.headers.get("Referer"))
+    if _is_allowed_frontend_origin(referrer_origin):
+        return referrer_origin
+
+    host_origin = _origin_from_url(f"{request.scheme}://{request.get_host()}")
+    if _is_allowed_frontend_origin(host_origin):
+        return host_origin
+
+    return _origin_from_url(settings.FRONTEND_ORIGIN)
+
+
+def _get_oauth_redirect_origin(request: HttpRequest) -> str | None:
+    """Return a trusted post-OAuth frontend origin from session or settings."""
+    saved_origin = request.session.pop(_FRONTEND_ORIGIN_SESSION_KEY, None)
+    if _is_allowed_frontend_origin(saved_origin):
+        return saved_origin
+
+    fallback_origin = _origin_from_url(settings.FRONTEND_ORIGIN)
+    if _is_allowed_frontend_origin(fallback_origin):
+        return fallback_origin
+
+    return None
+
+
 @login_required
 def start_oauth(request: HttpRequest) -> HttpResponse | HttpResponseRedirect:
     """Django view: send the user to Google's consent screen to approve access."""
@@ -140,6 +200,9 @@ def start_oauth(request: HttpRequest) -> HttpResponse | HttpResponseRedirect:
     # accepting a malicious auth code by forging the callback URL.
     request.session["oauth_state"] = state
     request.session["oauth_code_verifier"] = flow.code_verifier
+    frontend_origin = _get_frontend_origin(request)
+    if frontend_origin:
+        request.session[_FRONTEND_ORIGIN_SESSION_KEY] = frontend_origin
     return HttpResponseRedirect(auth_url)
 
 
@@ -182,5 +245,8 @@ def oauth_callback(request: HttpRequest) -> HttpResponse:
         logger.exception("Failed to save Gmail OAuth credentials")
         return HttpResponse("Failed to save Gmail credentials.", status=500)
 
-    # TODO: once the React frontend exists, redirect to http://localhost:5173/settings?connected=true
-    return HttpResponse("Gmail connected. You may close this tab.")
+    frontend_origin = _get_oauth_redirect_origin(request)
+    if not frontend_origin:
+        logger.error("No safe frontend origin configured for OAuth redirect")
+        return HttpResponse("OAuth complete. Please return to the app.", status=200)
+    return HttpResponseRedirect(f"{frontend_origin}/settings?connected=true")

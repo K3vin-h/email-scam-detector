@@ -4,14 +4,17 @@ from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import RequestFactory, TestCase, override_settings
 from rest_framework.test import APIClient
 from sklearn.feature_extraction.text import TfidfVectorizer
 
-from dashboard.models import EmailRecord, ScanSettings
+from dashboard.models import EmailRecord, ScanSettings, SummaryReport
+from dashboard.risk import RISK_LEGIT, RISK_POSSIBLE, RISK_SCAM, risk_level_for_email
 from dashboard.scanner import run_scan
 from gmail.fetch import list_email_ids as gmail_list_email_ids
 from gmail.fetch import list_emails as gmail_list_emails
+from gmail.auth import _get_frontend_origin, _get_oauth_redirect_origin
+from ml.predict import is_scam_confidence
 from ml.vectorizer_io import load_vectorizer, save_vectorizer
 
 
@@ -88,6 +91,11 @@ class RunScanTests(TestCase):
         record = EmailRecord.objects.get(gmail_id="gmail-1")
         self.assertTrue(record.is_scam)
         self.assertTrue(record.labeled_in_gmail)
+        self.assertEqual(SummaryReport.objects.count(), 3)
+        self.assertEqual(
+            SummaryReport.objects.get(period="daily").top_senders,
+            [{"sender": "sender@example.com", "count": 1}],
+        )
         get_or_create_label.assert_called_once_with("Scam")
         apply_label.assert_called_once_with("gmail-1", "Label_123")
 
@@ -160,6 +168,41 @@ class RunScanTests(TestCase):
         load_predictor.assert_not_called()
         get_or_create_label.assert_called_once_with("Scam")
         apply_label.assert_called_once_with("gmail-1", "Label_123")
+
+    @patch("dashboard.scanner.apply_label")
+    @patch("dashboard.scanner.get_or_create_label")
+    @patch("dashboard.scanner.load_predictor")
+    @patch("dashboard.scanner.get_email")
+    @patch("dashboard.scanner.list_email_ids")
+    def test_scan_does_not_retry_label_for_low_confidence_existing_scam(
+        self,
+        list_email_ids,
+        get_email,
+        load_predictor,
+        get_or_create_label,
+        apply_label,
+    ):
+        EmailRecord.objects.create(
+            gmail_id="gmail-1",
+            sender="sender@example.com",
+            subject="Already scanned",
+            snippet="Existing snippet",
+            received_at=datetime(2026, 5, 17, tzinfo=timezone.utc),
+            confidence=0.80,
+            is_scam=True,
+            labeled_in_gmail=False,
+        )
+        list_email_ids.return_value = ["gmail-1"]
+
+        result = run_scan()
+
+        self.assertEqual(result, {"scanned": 1, "new": 0, "scams_found": 0})
+        record = EmailRecord.objects.get(gmail_id="gmail-1")
+        self.assertFalse(record.labeled_in_gmail)
+        get_email.assert_not_called()
+        load_predictor.assert_not_called()
+        get_or_create_label.assert_not_called()
+        apply_label.assert_not_called()
 
     @patch("dashboard.scanner.apply_label")
     @patch("dashboard.scanner.get_or_create_label")
@@ -306,6 +349,107 @@ class DashboardAPITests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json(), {"is_scam": "Expected 'true' or 'false'."})
 
+    def test_email_list_filters_by_risk_level(self):
+        self.client.force_authenticate(user=self.user)
+        EmailRecord.objects.create(
+            gmail_id="trusted",
+            sender="Adobe Acrobat <mail@mail.adobe.com>",
+            subject="Adobe update",
+            snippet="Your document is ready",
+            received_at=datetime(2026, 5, 17, tzinfo=timezone.utc),
+            confidence=0.99,
+            is_scam=True,
+            labeled_in_gmail=False,
+        )
+        EmailRecord.objects.create(
+            gmail_id="possible",
+            sender="notice@example.com",
+            subject="Verify your account",
+            snippet="Please review",
+            received_at=datetime(2026, 5, 17, tzinfo=timezone.utc),
+            confidence=0.70,
+            is_scam=False,
+            labeled_in_gmail=False,
+        )
+        EmailRecord.objects.create(
+            gmail_id="scam",
+            sender="bad@example.com",
+            subject="Claim prize",
+            snippet="Act now",
+            received_at=datetime(2026, 5, 17, tzinfo=timezone.utc),
+            confidence=0.95,
+            is_scam=True,
+            labeled_in_gmail=False,
+        )
+
+        legit_response = self.client.get("/api/emails/?risk_level=legit")
+        possible_response = self.client.get("/api/emails/?risk_level=possible_scam")
+        scam_response = self.client.get("/api/emails/?risk_level=scam")
+
+        self.assertEqual(legit_response.status_code, 200)
+        self.assertEqual(legit_response.json()["results"][0]["gmail_id"], "trusted")
+        self.assertEqual(legit_response.json()["results"][0]["risk_label"], "Legit")
+        self.assertEqual(possible_response.json()["results"][0]["gmail_id"], "possible")
+        self.assertEqual(scam_response.json()["results"][0]["gmail_id"], "scam")
+
+    def test_email_list_rejects_invalid_risk_level_filter(self):
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get("/api/emails/?risk_level=maybe")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json(),
+            {"risk_level": "Expected 'legit', 'possible_scam', or 'scam'."},
+        )
+
+    def test_email_risk_feedback_overrides_model_risk(self):
+        self.client.force_authenticate(user=self.user)
+        record = EmailRecord.objects.create(
+            gmail_id="gmail-1",
+            sender="bad@example.com",
+            subject="False positive",
+            snippet="Looks safe",
+            received_at=datetime(2026, 5, 17, tzinfo=timezone.utc),
+            confidence=0.95,
+            is_scam=True,
+            labeled_in_gmail=False,
+        )
+
+        response = self.client.patch(
+            f"/api/emails/{record.id}/risk/",
+            {"risk_level": "legit"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        record.refresh_from_db()
+        self.assertEqual(record.user_risk_override, "legit")
+        self.assertEqual(response.json()["risk_level"], "legit")
+        self.assertEqual(response.json()["risk_label"], "Legit")
+
+    def test_email_risk_feedback_rejects_invalid_risk(self):
+        self.client.force_authenticate(user=self.user)
+        record = EmailRecord.objects.create(
+            gmail_id="gmail-1",
+            sender="bad@example.com",
+            subject="Message",
+            snippet="Snippet",
+            received_at=datetime(2026, 5, 17, tzinfo=timezone.utc),
+            confidence=0.95,
+            is_scam=True,
+            labeled_in_gmail=False,
+        )
+
+        response = self.client.patch(
+            f"/api/emails/{record.id}/risk/",
+            {"risk_level": "wrong"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("risk_level", response.json())
+
     def test_scan_settings_validation_rejects_unsafe_values(self):
         self.client.force_authenticate(user=self.user)
         ScanSettings.load()
@@ -356,6 +500,31 @@ class DashboardAPITests(TestCase):
         self.assertEqual(
             response.json(),
             {"error": "Scan failed. Please try again later."},
+        )
+
+    def test_reports_api_backfills_reports_from_existing_scan_results(self):
+        self.client.force_authenticate(user=self.user)
+        EmailRecord.objects.create(
+            gmail_id="gmail-1",
+            sender="scam@example.com",
+            subject="Prize",
+            snippet="Claim your prize",
+            received_at=datetime(2026, 5, 17, tzinfo=timezone.utc),
+            confidence=0.95,
+            is_scam=True,
+            labeled_in_gmail=True,
+        )
+
+        response = self.client.get("/api/reports/?period=daily")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["count"], 1)
+        self.assertEqual(body["results"][0]["period"], "daily")
+        self.assertEqual(body["results"][0]["total_scams"], 1)
+        self.assertEqual(
+            body["results"][0]["top_senders"],
+            [{"sender": "scam@example.com", "count": 1}],
         )
 
 
@@ -428,6 +597,61 @@ class GmailFetchTests(TestCase):
         )
 
 
+class GmailOAuthOriginTests(TestCase):
+    @override_settings(
+        CORS_ALLOWED_ORIGINS=[
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+        ],
+        FRONTEND_ORIGIN="http://localhost:5173",
+    )
+    def test_frontend_origin_preserves_active_loopback_host(self):
+        request = RequestFactory().get(
+            "/auth/gmail/",
+            HTTP_HOST="127.0.0.1:5173",
+        )
+
+        self.assertEqual(_get_frontend_origin(request), "http://127.0.0.1:5173")
+
+    @override_settings(
+        CORS_ALLOWED_ORIGINS=[
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+        ],
+        FRONTEND_ORIGIN="http://localhost:5173",
+    )
+    def test_frontend_origin_uses_trusted_referer_before_default(self):
+        request = RequestFactory().get(
+            "/auth/gmail/",
+            HTTP_REFERER="http://127.0.0.1:5173/settings",
+        )
+
+        self.assertEqual(_get_frontend_origin(request), "http://127.0.0.1:5173")
+
+    @override_settings(
+        CORS_ALLOWED_ORIGINS=[
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+        ],
+        FRONTEND_ORIGIN="http://localhost:5173",
+    )
+    def test_oauth_redirect_origin_uses_saved_trusted_origin(self):
+        request = RequestFactory().get("/auth/callback/")
+        request.session = {"oauth_frontend_origin": "http://127.0.0.1:5173"}
+
+        self.assertEqual(_get_oauth_redirect_origin(request), "http://127.0.0.1:5173")
+
+    @override_settings(
+        CORS_ALLOWED_ORIGINS=["http://localhost:5173"],
+        FRONTEND_ORIGIN="http://localhost:5173",
+    )
+    def test_oauth_redirect_origin_rejects_untrusted_saved_origin(self):
+        request = RequestFactory().get("/auth/callback/")
+        request.session = {"oauth_frontend_origin": "https://evil.example"}
+
+        self.assertEqual(_get_oauth_redirect_origin(request), "http://localhost:5173")
+
+
 class VectorizerIOTests(TestCase):
     def test_vectorizer_round_trips_without_pickle(self):
         vectorizer = TfidfVectorizer(max_features=10, sublinear_tf=True)
@@ -446,3 +670,53 @@ class VectorizerIOTests(TestCase):
     def test_vectorizer_load_fails_cleanly_for_missing_artifact(self):
         with self.assertRaisesRegex(RuntimeError, "Vectorizer artifact not found"):
             load_vectorizer(Path("missing-vectorizer.json"))
+
+
+class PredictorThresholdTests(TestCase):
+    def test_mid_confidence_messages_are_not_marked_as_scam(self):
+        self.assertFalse(is_scam_confidence(0.84))
+
+    def test_high_confidence_messages_are_marked_as_scam(self):
+        self.assertTrue(is_scam_confidence(0.85))
+
+
+class RiskLevelTests(TestCase):
+    def test_trusted_adobe_sender_is_legit_even_with_high_model_confidence(self):
+        self.assertEqual(
+            risk_level_for_email(
+                sender="Adobe Acrobat <mail@mail.adobe.com>",
+                confidence=0.99,
+                is_scam=True,
+            ),
+            RISK_LEGIT,
+        )
+
+    def test_trusted_osu_sender_is_legit_even_with_high_model_confidence(self):
+        self.assertEqual(
+            risk_level_for_email(
+                sender='"osu!" <osu@ppy.sh>',
+                confidence=0.99,
+                is_scam=True,
+            ),
+            RISK_LEGIT,
+        )
+
+    def test_medium_confidence_email_is_possible_scam(self):
+        self.assertEqual(
+            risk_level_for_email(
+                sender="notice@example.com",
+                confidence=0.65,
+                is_scam=False,
+            ),
+            RISK_POSSIBLE,
+        )
+
+    def test_high_confidence_model_scam_is_scam(self):
+        self.assertEqual(
+            risk_level_for_email(
+                sender="bad@example.com",
+                confidence=0.95,
+                is_scam=True,
+            ),
+            RISK_SCAM,
+        )

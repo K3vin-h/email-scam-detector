@@ -16,6 +16,12 @@ from ml.model import ScamClassifier
 from ml.vectorizer_io import load_vectorizer
 
 ML_DIR = Path("ml")
+SCAM_THRESHOLD = 0.85
+
+
+def is_scam_confidence(confidence: float) -> bool:
+    """Return True only for high-confidence scam predictions."""
+    return confidence >= SCAM_THRESHOLD
 
 
 def load_predictor():
@@ -43,7 +49,7 @@ def load_predictor():
         with torch.no_grad():
             confidence = model(x).item()
 
-        return confidence >= 0.5, confidence
+        return is_scam_confidence(confidence), confidence
 
     return _predict
 

@@ -104,7 +104,6 @@ REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
-        "rest_framework.authentication.BasicAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_THROTTLE_CLASSES": [
@@ -116,6 +115,9 @@ REST_FRAMEWORK = {
         "user": config("DRF_USER_THROTTLE_RATE", default="1000/hour"),
     },
 }
+
+FRONTEND_ORIGIN = config("FRONTEND_ORIGIN", default="http://localhost:5173")
+LOGIN_REDIRECT_URL = "/"
 
 CORS_ALLOWED_ORIGINS = config(
     "CORS_ALLOWED_ORIGINS",

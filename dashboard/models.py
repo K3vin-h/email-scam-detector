@@ -4,6 +4,12 @@ from django.db import models
 class EmailRecord(models.Model):
     """Stores the result of scanning one Gmail message through the ML model."""
 
+    RISK_OVERRIDE_CHOICES = [
+        ("legit", "Legit"),
+        ("possible_scam", "Possible scam"),
+        ("scam", "Scam"),
+    ]
+
     gmail_id = models.CharField(max_length=200, unique=True)
     sender = models.CharField(max_length=500)
     subject = models.CharField(max_length=1000)
@@ -14,6 +20,14 @@ class EmailRecord(models.Model):
     is_scam = models.BooleanField()
     labeled_in_gmail = models.BooleanField(default=False)
     scanned_at = models.DateTimeField(auto_now_add=True)
+    # reasons: rule-based tags explaining why the email was flagged as scam
+    reasons = models.JSONField(default=list, blank=True)
+    user_risk_override = models.CharField(
+        max_length=20,
+        choices=RISK_OVERRIDE_CHOICES,
+        blank=True,
+        default="",
+    )
 
     class Meta:
         ordering = ["-received_at"]
