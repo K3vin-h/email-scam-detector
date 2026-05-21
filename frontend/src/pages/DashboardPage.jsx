@@ -1,10 +1,14 @@
 import { useEmails } from '../hooks/useEmails.js';
 import { useStats } from '../hooks/useStats.js';
-import { StatCard } from '../components/StatCard.jsx';
+import { NavBar } from '../components/NavBar.jsx';
+import { MobileTabBar } from '../components/MobileTabBar.jsx';
+import { PageShell } from '../components/PageShell.jsx';
+import { GlassCard } from '../components/GlassCard.jsx';
 import { EmailRow } from '../components/EmailRow.jsx';
 import { FilterBar } from '../components/FilterBar.jsx';
 import { Pagination } from '../components/Pagination.jsx';
-import { ScanButton } from '../components/ScanButton.jsx';
+import { SecurityHero } from '../components/SecurityHero.jsx';
+import { StatCard } from '../components/StatCard.jsx';
 
 export function DashboardPage() {
   const { stats, loading: statsLoading, refetch: refetchStats } = useStats();
@@ -24,59 +28,74 @@ export function DashboardPage() {
     refetchStats();
     refetchEmails();
   };
+  const threatRatio = stats?.total_scanned > 0
+    ? (stats.total_scams / stats.total_scanned * 100).toFixed(1)
+    : '0.0';
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
-        <ScanButton onComplete={handleScanComplete} />
-      </div>
+    <PageShell>
+      <NavBar />
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-7 pb-24 md:pb-8 space-y-5">
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard label="Total Scanned"  value={stats?.total_scanned}       loading={statsLoading} />
-        <StatCard label="Total Scams"    value={stats?.total_scams}          loading={statsLoading} variant="danger" />
-        <StatCard label="Scams (7 days)" value={stats?.scams_last_7_days}    loading={statsLoading} variant="danger" />
-        <StatCard label="Scams (30 days)" value={stats?.scams_last_30_days}  loading={statsLoading} variant="danger" />
-      </div>
+        <SecurityHero
+          stats={stats}
+          statsLoading={statsLoading}
+          onScanComplete={handleScanComplete}
+        />
 
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-4 flex-wrap">
-          <h2 className="text-sm font-semibold text-slate-700">Emails</h2>
-          <FilterBar value={filter} onChange={changeFilter} />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <StatCard
+            label="Total Scanned"
+            value={stats?.total_scanned ?? 0}
+            sub="All time"
+            loading={statsLoading}
+          />
+          <StatCard
+            label="Scams Blocked"
+            value={stats?.total_scams ?? 0}
+            sub="All time"
+            variant="danger"
+            loading={statsLoading}
+          />
+          <StatCard
+            label="Threat Ratio"
+            value={threatRatio}
+            suffix="%"
+            sub="All time"
+            variant="rate"
+            loading={statsLoading}
+          />
         </div>
 
-        {emailsLoading ? (
-          <div className="py-16 text-center text-sm text-slate-400">Loading…</div>
-        ) : emailsError ? (
-          <div className="py-16 text-center text-sm text-rose-600">Failed to load emails. Try again.</div>
-        ) : emails.length === 0 ? (
-          <div className="py-16 text-center text-sm text-slate-400">
-            No emails found. Run a scan to get started.
-          </div>
-        ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="border-b border-slate-100">
-                    <th className="px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">From</th>
-                    <th className="px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Subject</th>
-                    <th className="px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Status</th>
-                    <th className="px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Confidence</th>
-                    <th className="px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Date</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {emails.map((email) => (
-                    <EmailRow key={email.gmail_id} email={email} />
-                  ))}
-                </tbody>
-              </table>
+        <GlassCard className="overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-200/70 flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <h2 className="text-base font-semibold text-slate-800 tracking-tight">Recent activity</h2>
+              <p className="text-sm text-slate-500 mt-0.5">Sorted by most recent scan results.</p>
             </div>
-            <Pagination page={page} count={count} onPageChange={setPage} />
-          </>
-        )}
-      </div>
-    </div>
+            <FilterBar value={filter} onChange={changeFilter} />
+          </div>
+
+          {emailsLoading ? (
+            <div className="py-16 text-center text-sm text-slate-400">Loading…</div>
+          ) : emailsError ? (
+            <div className="py-16 text-center text-sm text-rose-600">Failed to load emails. Try again.</div>
+          ) : emails.length === 0 ? (
+            <div className="py-16 text-center text-sm text-slate-400">No emails found. Run a scan to get started.</div>
+          ) : (
+            <>
+              <div className="divide-y divide-slate-100/80">
+                {emails.map((email) => (
+                  <EmailRow key={email.gmail_id} email={email} />
+                ))}
+              </div>
+              <Pagination page={page} count={count} onPageChange={setPage} />
+            </>
+          )}
+        </GlassCard>
+
+      </main>
+      <MobileTabBar />
+    </PageShell>
   );
 }

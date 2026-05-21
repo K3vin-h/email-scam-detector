@@ -9,6 +9,15 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
+    <script>
+      (() => {
+        const saved = localStorage.getItem('scam-filter-theme');
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if ((saved || (prefersDark ? 'dark' : 'light')) === 'dark') {
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
     <title>Scam Filter</title>
   </head>
   <body>

@@ -14,6 +14,8 @@ class EmailRecord(models.Model):
     is_scam = models.BooleanField()
     labeled_in_gmail = models.BooleanField(default=False)
     scanned_at = models.DateTimeField(auto_now_add=True)
+    # reasons: rule-based tags explaining why the email was flagged as scam
+    reasons = models.JSONField(default=list, blank=True)
 
     class Meta:
         ordering = ["-received_at"]

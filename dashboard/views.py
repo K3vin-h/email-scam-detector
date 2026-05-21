@@ -1,7 +1,7 @@
 import logging
-from datetime import timedelta
+from datetime import date, timedelta
 
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
@@ -11,6 +11,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from dashboard.models import EmailRecord, ScanSettings, SummaryReport
+from dashboard.reports import ensure_summary_reports
 from dashboard.serializers import (
     EmailRecordSerializer,
     ScanSettingsSerializer,
@@ -51,16 +52,51 @@ class ScanSettingsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    def _serialize_settings(self, settings):
+        data = ScanSettingsSerializer(settings).data
+        data.update(self._gmail_metadata())
+        return data
+
+    def _gmail_metadata(self):
+        metadata = {
+            "gmail_connected": False,
+            "gmail_email_address": "",
+            "gmail_last_sync": None,
+        }
+
+        try:
+            from gmail.auth import get_service
+
+            profile = get_service().users().getProfile(userId="me").execute()
+        except Exception:
+            logger.info("Gmail profile unavailable while loading settings", exc_info=True)
+            return metadata
+
+        latest_scan = (
+            EmailRecord.objects.order_by("-scanned_at")
+            .values_list("scanned_at", flat=True)
+            .first()
+        )
+
+        metadata.update(
+            {
+                "gmail_connected": True,
+                "gmail_email_address": profile.get("emailAddress", ""),
+                "gmail_last_sync": latest_scan.isoformat() if latest_scan else None,
+            }
+        )
+        return metadata
+
     def get(self, request):
         settings = ScanSettings.load()
-        return Response(ScanSettingsSerializer(settings).data)
+        return Response(self._serialize_settings(settings))
 
     def patch(self, request):
         settings = ScanSettings.load()
         serializer = ScanSettingsSerializer(settings, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response(serializer.data)
+        return Response(self._serialize_settings(serializer.instance))
 
 
 class SummaryReportListView(ListAPIView):
@@ -70,6 +106,7 @@ class SummaryReportListView(ListAPIView):
     serializer_class = SummaryReportSerializer
 
     def get_queryset(self):
+        ensure_summary_reports()
         qs = SummaryReport.objects.all()
         period = self.request.query_params.get("period")
         if period in ("daily", "weekly", "monthly"):
@@ -105,6 +142,90 @@ class StatsView(APIView):
                     is_scam=True, received_at__gte=last_30
                 ).count(),
                 "top_scam_senders": top_senders,
+            }
+        )
+
+
+class DailyStatsView(APIView):
+    """GET /api/stats/daily/ — scanned and scam counts for the last 7 days."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        today = timezone.now().date()
+        seven_days_ago = today - timedelta(days=6)
+
+        rows = (
+            EmailRecord.objects.filter(scanned_at__date__gte=seven_days_ago)
+            .values("scanned_at__date")
+            .annotate(
+                scanned=Count("id"),
+                scams=Count("id", filter=Q(is_scam=True)),
+            )
+            .order_by("scanned_at__date")
+        )
+
+        # Build a full 7-day range with zeros for missing days
+        data: list[dict] = []
+        row_map = {r["scanned_at__date"]: r for r in rows}
+        for i in range(7):
+            d: date = seven_days_ago + timedelta(days=i)
+            row = row_map.get(d, {})
+            data.append(
+                {
+                    "day": d.strftime("%a"),
+                    "date": d.isoformat(),
+                    "scanned": row.get("scanned", 0),
+                    "scams": row.get("scams", 0),
+                }
+            )
+
+        return Response(data)
+
+
+class TopSendersView(APIView):
+    """GET /api/stats/senders/ — most impersonated domain, highest risk sender, scam trend."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from collections import Counter
+
+        today = timezone.now().date()
+        last_7 = today - timedelta(days=6)
+        prior_7_start = today - timedelta(days=13)
+
+        scam_qs = EmailRecord.objects.filter(is_scam=True)
+
+        top_email = (
+            scam_qs.values("sender")
+            .annotate(n=Count("id"))
+            .order_by("-n")
+            .first()
+        )
+        highest_risk = top_email["sender"] if top_email else None
+
+        domains = [
+            r["sender"].split("@")[-1]
+            for r in scam_qs.values("sender")
+        ]
+        domain_counts = Counter(domains)
+        most_impersonated = (
+            domain_counts.most_common(1)[0][0] if domain_counts else None
+        )
+
+        c_last = scam_qs.filter(scanned_at__date__gte=last_7).count()
+        c_prior = scam_qs.filter(
+            scanned_at__date__gte=prior_7_start,
+            scanned_at__date__lt=last_7,
+        ).count()
+        trend = round((c_last - c_prior) / max(c_prior, 1) * 100)
+
+        return Response(
+            {
+                "most_impersonated": most_impersonated,
+                "highest_risk_sender": highest_risk,
+                "scam_trend_pct": trend,
             }
         )
 

@@ -17,6 +17,7 @@ class EmailRecordSerializer(serializers.ModelSerializer):
             "is_scam",
             "labeled_in_gmail",
             "scanned_at",
+            "reasons",
         ]
         read_only_fields = fields
 

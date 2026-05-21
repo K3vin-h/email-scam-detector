@@ -43,17 +43,19 @@ const renderPage = () =>
   render(<MemoryRouter><DashboardPage /></MemoryRouter>);
 
 beforeEach(() => {
+  api.getHealth.mockResolvedValue({ status: 'ok' });
   api.getStats.mockResolvedValue(mockStats);
   api.getEmails.mockResolvedValue(mockEmailsPage);
 });
 
 describe('DashboardPage', () => {
-  it('renders stat cards after loading', async () => {
+  it('renders hero stats after loading', async () => {
     renderPage();
     await waitFor(() => expect(screen.getByText('100')).toBeInTheDocument());
     expect(screen.getByText('20')).toBeInTheDocument();
-    expect(screen.getByText('5')).toBeInTheDocument();
-    expect(screen.getByText('15')).toBeInTheDocument();
+    expect(screen.getByText('Total Scanned')).toBeInTheDocument();
+    expect(screen.getByText('Scams Blocked')).toBeInTheDocument();
+    expect(screen.getByText('Threat Ratio')).toBeInTheDocument();
   });
 
   it('renders email rows with sender names', async () => {

@@ -24,10 +24,13 @@ async function request(path, { method = 'GET', body, ...opts } = {}) {
 }
 
 export const api = {
-  getEmails:     (params) => request(`/api/emails/?${new URLSearchParams(params)}`),
-  getStats:      ()       => request('/api/stats/'),
-  getSettings:   ()       => request('/api/settings/'),
-  patchSettings: (data)   => request('/api/settings/', { method: 'PATCH', body: data }),
-  getReports:    (period) => request(`/api/reports/${period ? `?${new URLSearchParams({ period })}` : ''}`),
-  triggerScan:   ()       => request('/api/scan/', { method: 'POST' }),
+  getHealth:      ()       => request('/api/health/'),
+  getEmails:      (params) => request(`/api/emails/?${new URLSearchParams(params)}`),
+  getStats:       ()       => request('/api/stats/'),
+  getDailyStats:  ()       => request('/api/stats/daily/'),
+  getSenderStats: ()       => request('/api/stats/senders/'),
+  getSettings:    ()       => request('/api/settings/'),
+  patchSettings:  (data)   => request('/api/settings/', { method: 'PATCH', body: data }),
+  getReports:     (period) => request(`/api/reports/${period ? `?${new URLSearchParams({ period })}` : ''}`),
+  triggerScan:    ()       => request('/api/scan/', { method: 'POST' }),
 };

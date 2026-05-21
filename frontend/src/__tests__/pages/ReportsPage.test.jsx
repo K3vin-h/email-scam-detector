@@ -27,7 +27,11 @@ const renderPage = () =>
   render(<MemoryRouter><ReportsPage /></MemoryRouter>);
 
 beforeEach(() => {
+  api.getHealth.mockResolvedValue({ status: 'ok' });
   api.getReports.mockResolvedValue(mockReports);
+  api.getStats.mockResolvedValue({ total_scanned: 10, total_scams: 5, scams_last_7_days: 3, scams_last_30_days: 5 });
+  api.getDailyStats.mockResolvedValue([]);
+  api.getSenderStats.mockResolvedValue({ most_impersonated: 'paypal.com', highest_risk_sender: 'scam@bad.com', scam_trend_pct: 10 });
 });
 
 describe('ReportsPage', () => {
@@ -55,6 +59,7 @@ describe('ReportsPage', () => {
     await waitFor(() =>
       expect(api.getReports).toHaveBeenCalledWith('weekly')
     );
+    expect(screen.getByText('Weekly')).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('clicking Monthly calls getReports with period=monthly', async () => {
@@ -63,12 +68,25 @@ describe('ReportsPage', () => {
 
     fireEvent.click(screen.getByText('Monthly'));
     await waitFor(() => expect(api.getReports).toHaveBeenCalledWith('monthly'));
+    expect(screen.getByText('Monthly')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('clicking All returns to unfiltered reports', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Weekly')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Weekly'));
+    await waitFor(() => expect(api.getReports).toHaveBeenCalledWith('weekly'));
+
+    fireEvent.click(screen.getByText('All'));
+    await waitFor(() => expect(api.getReports).toHaveBeenCalledWith(''));
+    expect(screen.getByText('All')).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('shows empty state when no reports', async () => {
     api.getReports.mockResolvedValueOnce({ count: 0, results: [] });
     renderPage();
-    await waitFor(() => expect(screen.getByText(/No reports found/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/No reports yet/)).toBeInTheDocument());
   });
 
   it('shows error state on API failure', async () => {

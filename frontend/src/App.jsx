@@ -1,10 +1,10 @@
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth.js';
-import { NavBar } from './components/NavBar.jsx';
 import { LoginPage } from './pages/LoginPage.jsx';
 import { DashboardPage } from './pages/DashboardPage.jsx';
 import { ReportsPage } from './pages/ReportsPage.jsx';
 import { SettingsPage } from './pages/SettingsPage.jsx';
+import { UnsavedChangesProvider } from './components/UnsavedChangesContext.jsx';
 
 function LoadingScreen() {
   return (
@@ -43,25 +43,20 @@ function ProtectedLayout() {
     );
   }
   if (!authenticated) return <Navigate to="/login" replace />;
-  return (
-    <div className="min-h-screen bg-slate-50">
-      <NavBar />
-      <main className="max-w-5xl mx-auto px-6 py-8">
-        <Outlet />
-      </main>
-    </div>
-  );
+  return <Outlet />;
 }
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/" element={<ProtectedLayout />}>
-        <Route index element={<DashboardPage />} />
-        <Route path="reports" element={<ReportsPage />} />
-        <Route path="settings" element={<SettingsPage />} />
-      </Route>
-    </Routes>
+    <UnsavedChangesProvider>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/" element={<ProtectedLayout />}>
+          <Route index element={<DashboardPage />} />
+          <Route path="reports" element={<ReportsPage />} />
+          <Route path="settings" element={<SettingsPage />} />
+        </Route>
+      </Routes>
+    </UnsavedChangesProvider>
   );
 }

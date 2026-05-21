@@ -23,6 +23,7 @@ const renderPage = (path = '/settings') =>
   );
 
 beforeEach(() => {
+  api.getHealth.mockResolvedValue({ status: 'ok' });
   api.getSettings.mockResolvedValue(baseSettings);
   api.patchSettings.mockResolvedValue(baseSettings);
 });
@@ -30,12 +31,12 @@ beforeEach(() => {
 describe('SettingsPage', () => {
   it('pre-populates scan_window_days from settings', async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByDisplayValue('7')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('7')).toBeInTheDocument());
   });
 
   it('pre-populates scan_frequency_hours from settings', async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByDisplayValue('6')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('6')).toBeInTheDocument());
   });
 
   it('shows Gmail connected banner when ?connected=true', async () => {
@@ -53,7 +54,7 @@ describe('SettingsPage', () => {
 
   it('does not render notify_email_address when notify_via_email is false', async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByDisplayValue('7')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('7')).toBeInTheDocument());
     expect(screen.queryByLabelText(/Notification email/i)).not.toBeInTheDocument();
   });
 
@@ -67,26 +68,29 @@ describe('SettingsPage', () => {
 
   it('submitting calls patchSettings with form values', async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByDisplayValue('7')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('7')).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole('button', { name: /save settings/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /increase/i })[0]);
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
     await waitFor(() => expect(api.patchSettings).toHaveBeenCalled());
   });
 
   it('shows saved confirmation after successful save', async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByDisplayValue('7')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('7')).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole('button', { name: /save settings/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /increase/i })[0]);
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
     await waitFor(() => expect(screen.getByText(/Settings saved/i)).toBeInTheDocument());
   });
 
   it('shows error message when save fails', async () => {
     api.patchSettings.mockRejectedValueOnce(new Error('HTTP_400'));
     renderPage();
-    await waitFor(() => expect(screen.getByDisplayValue('7')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('7')).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole('button', { name: /save settings/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /increase/i })[0]);
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
     await waitFor(() => expect(screen.getByText(/Failed to save settings/i)).toBeInTheDocument());
   });
 

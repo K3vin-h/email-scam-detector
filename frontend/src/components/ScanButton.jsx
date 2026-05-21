@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Loader, Scan } from 'lucide-react';
 import { api } from '../api/client.js';
 
 export function ScanButton({ onComplete }) {
@@ -15,38 +16,38 @@ export function ScanButton({ onComplete }) {
       setResult(data);
       onComplete?.();
     } catch (err) {
-      setError(
-        err.message === 'NOT_AUTHENTICATED'
-          ? 'Not signed in.'
-          : 'Scan failed. Try again.'
-      );
+      setError(err.message === 'NOT_AUTHENTICATED' ? 'Not signed in.' : 'Scan failed.');
     } finally {
       setScanning(false);
     }
   };
 
   return (
-    <div className="flex items-center gap-3 flex-wrap">
-      <button
-        onClick={handleScan}
-        disabled={scanning}
-        className="px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-      >
+    <div className="flex flex-col items-end gap-2 shrink-0">
+      <div className="relative inline-flex">
         {scanning && (
-          <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
+          <span className="absolute inset-0 rounded-full bg-indigo-500/30 animate-ping" aria-hidden="true" />
         )}
-        {scanning ? 'Scanning…' : 'Scan Now'}
-      </button>
+        <button
+          onClick={handleScan}
+          disabled={scanning}
+          className="relative inline-flex items-center gap-2 px-5 py-2.5 rounded-full font-semibold text-sm text-white bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/30 hover:shadow-xl hover:shadow-indigo-500/40 active:scale-95 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+        >
+          {scanning
+            ? <Loader size={15} strokeWidth={2.5} className="animate-spin" />
+            : <Scan size={15} strokeWidth={2} />}
+          {scanning ? 'Scanning…' : 'Scan Now'}
+        </button>
+      </div>
       {result && (
-        <p className="text-sm text-slate-600">
-          Scanned {result.new} new ·{' '}
-          <span className="text-rose-600 font-medium">{result.scams_found} scam{result.scams_found !== 1 ? 's' : ''}</span>
+        <p className="text-xs text-slate-600">
+          {result.new} new ·{' '}
+          <span className="text-rose-600 font-semibold">
+            {result.scams_found} scam{result.scams_found !== 1 ? 's' : ''}
+          </span>
         </p>
       )}
-      {error && <p className="text-sm text-rose-600">{error}</p>}
+      {error && <p className="text-xs text-rose-600">{error}</p>}
     </div>
   );
 }

@@ -1,12 +1,14 @@
 from django.urls import path
 
 from dashboard.views import (
+    DailyStatsView,
     EmailListView,
     HealthView,
     ScanSettingsView,
     ScanView,
     StatsView,
     SummaryReportListView,
+    TopSendersView,
 )
 
 urlpatterns = [
@@ -15,5 +17,7 @@ urlpatterns = [
     path("settings/", ScanSettingsView.as_view(), name="scan-settings"),
     path("reports/", SummaryReportListView.as_view(), name="report-list"),
     path("stats/", StatsView.as_view(), name="stats"),
+    path("stats/daily/", DailyStatsView.as_view(), name="daily-stats"),
+    path("stats/senders/", TopSendersView.as_view(), name="top-senders"),
     path("scan/", ScanView.as_view(), name="scan"),
 ]
