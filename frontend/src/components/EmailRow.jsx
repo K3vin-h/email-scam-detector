@@ -32,28 +32,28 @@ export function EmailRow({ email, onCorrectRisk }) {
     : Array.isArray(email.reasons) ? email.reasons : [];
   const tone = {
     scam: {
-        border: 'border-l-rose-500',
-        badge: 'bg-rose-50 text-rose-700 border-rose-200',
-        bar: 'bg-rose-500',
-        chip: 'bg-rose-50/80 text-rose-700 border-rose-200/80',
+      border: 'border-l-rose-500',
+      badge: 'bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-500/40',
+      bar:   'bg-rose-500',
+      chip:  'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-500/15 dark:text-rose-300 dark:border-rose-500/30',
     },
     possible_scam: {
-        border: 'border-l-amber-500',
-        badge: 'bg-amber-50 text-amber-700 border-amber-200',
-        bar: 'bg-amber-500',
-        chip: 'bg-amber-50/80 text-amber-700 border-amber-200/80',
+      border: 'border-l-amber-500',
+      badge: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/40',
+      bar:   'bg-amber-500',
+      chip:  'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30',
     },
     legit: {
-        border: 'border-l-emerald-500',
-        badge: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-        bar: 'bg-emerald-500',
-        chip: 'bg-emerald-50/80 text-emerald-700 border-emerald-200/80',
+      border: 'border-l-emerald-500',
+      badge: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/40',
+      bar:   'bg-emerald-500',
+      chip:  'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30',
     },
   }[riskLevel] ?? {
     border: 'border-l-slate-300',
-    badge: 'bg-slate-50 text-slate-700 border-slate-200',
-    bar: 'bg-slate-400',
-    chip: 'bg-slate-50/80 text-slate-700 border-slate-200/80',
+    badge: 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-700/50 dark:text-slate-300 dark:border-slate-600',
+    bar:   'bg-slate-400',
+    chip:  'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-700/40 dark:text-slate-300 dark:border-slate-600/50',
   };
 
   useEffect(() => {

@@ -1,12 +1,17 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api/client.js';
 
+export const DEMO_KEY = 'scamfilter_demo';
+export const isDemoMode = () => localStorage.getItem(DEMO_KEY) === 'true';
+
 export function useAuth() {
-  const [authenticated, setAuthenticated] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const demo = isDemoMode();
+  const [authenticated, setAuthenticated] = useState(demo ? true : null);
+  const [loading, setLoading] = useState(!demo);
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    if (demo) return;
     api.getSettings()
       .then(() => {
         setAuthenticated(true);
@@ -23,7 +28,7 @@ export function useAuth() {
         }
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [demo]);
 
   return { authenticated, loading, error };
 }

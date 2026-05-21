@@ -1,6 +1,12 @@
-import { Lock, ShieldCheck } from 'lucide-react';
+import { Lock, ShieldCheck, FlaskConical } from 'lucide-react';
 import { PageShell } from '../components/PageShell.jsx';
 import { GlassCard } from '../components/GlassCard.jsx';
+import { DEMO_KEY } from '../hooks/useAuth.js';
+
+function enterDemo() {
+  localStorage.setItem(DEMO_KEY, 'true');
+  window.location.href = '/';
+}
 
 function GoogleIcon() {
   return (
@@ -35,11 +41,26 @@ export function LoginPage() {
 
             <a
               href="/admin/login/?next=/"
+              onClick={() => localStorage.removeItem(DEMO_KEY)}
               className="mt-8 inline-flex items-center justify-center gap-3 w-full px-5 py-3 rounded-full font-semibold text-sm text-slate-800 bg-white/90 border border-slate-200 shadow-sm shadow-slate-900/5 backdrop-blur-sm transition-all hover:border-indigo-200 hover:bg-white hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 active:scale-95 dark:border-white/10 dark:bg-slate-900/80 dark:text-slate-100 dark:shadow-indigo-950/30 dark:hover:border-indigo-400/40 dark:hover:bg-slate-800/90 dark:focus-visible:outline-indigo-300"
             >
               <GoogleIcon />
               Sign in with Google
             </a>
+
+            <div className="mt-3 flex items-center gap-3">
+              <div className="flex-1 h-px bg-slate-200/70 dark:bg-slate-700/50" />
+              <span className="text-[11px] text-slate-400 dark:text-slate-500">or</span>
+              <div className="flex-1 h-px bg-slate-200/70 dark:bg-slate-700/50" />
+            </div>
+
+            <button
+              onClick={enterDemo}
+              className="mt-3 inline-flex items-center justify-center gap-2.5 w-full px-5 py-3 rounded-full font-semibold text-sm text-indigo-700 bg-indigo-50/80 border border-indigo-200/60 shadow-sm transition-all hover:bg-indigo-100/80 hover:border-indigo-300/60 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 active:scale-95 dark:text-indigo-300 dark:bg-indigo-950/40 dark:border-indigo-800/40 dark:hover:bg-indigo-900/40 dark:hover:border-indigo-600/40"
+            >
+              <FlaskConical size={16} strokeWidth={2} />
+              Try demo
+            </button>
 
             <div className="mt-5 grid grid-cols-3 gap-2 text-[10px] uppercase tracking-wider font-semibold text-slate-400">
               <div className="flex items-center gap-1.5 justify-center"><span className="w-1 h-1 rounded-full bg-emerald-500" />OAuth</div>
