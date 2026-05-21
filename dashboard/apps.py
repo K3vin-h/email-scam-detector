@@ -4,8 +4,8 @@ Django AppConfig for the dashboard app.
 The ready() hook wires two things at startup:
   1. A post_save signal on ScanSettings so the scheduler interval is
      updated whenever the user changes scan_frequency_hours.
-  2. The APScheduler background thread (skipped in the dev-server reloader
-     process and during test runs to avoid spurious background activity).
+  2. The APScheduler background thread only for the Django dev server child
+     process, or when explicitly enabled via environment variable.
 """
 import logging
 import os
@@ -14,6 +14,26 @@ import sys
 from django.apps import AppConfig
 
 logger = logging.getLogger(__name__)
+SCHEDULER_AUTOSTART_ENV = "SCAM_FILTER_AUTO_START_SCHEDULER"
+
+
+def _env_flag_enabled(name: str) -> bool:
+    return os.environ.get(name, "").lower() in {"1", "true", "yes", "on"}
+
+
+def _should_start_scheduler() -> bool:
+    """Return whether this Django process should start APScheduler."""
+    if "test" in sys.argv or "pytest" in sys.modules:
+        return False
+
+    if _env_flag_enabled(SCHEDULER_AUTOSTART_ENV):
+        return True
+
+    running_dev_server = "runserver" in sys.argv
+    if not running_dev_server:
+        return False
+
+    return os.environ.get("RUN_MAIN") == "true" or "--noreload" in sys.argv
 
 
 def _reschedule_handler(sender, instance, **kwargs) -> None:
@@ -50,22 +70,8 @@ class DashboardConfig(AppConfig):
             dispatch_uid="dashboard.apps.reschedule_on_settings_save",
         )
 
-        # Skip the scheduler thread in test runs (manage.py test / pytest)
-        # so background threads do not interfere with test isolation.
-        if "test" in sys.argv or "pytest" in sys.modules:
-            logger.debug("Skipping scheduler start in test environment")
-            return
-
-        # Django's dev server (manage.py runserver --reload) spawns two
-        # processes.  Only the child process sets RUN_MAIN="true"; the
-        # parent reloader process should not start the scheduler.
-        # In production (gunicorn/uvicorn), RUN_MAIN is never set, so the
-        # scheduler always starts there.
-        running_dev_server = "runserver" in sys.argv
-        is_reloader_process = running_dev_server and os.environ.get("RUN_MAIN") != "true"
-
-        if is_reloader_process:
-            logger.debug("Skipping scheduler start in dev reloader process")
+        if not _should_start_scheduler():
+            logger.debug("Skipping scheduler start for this process")
             return
 
         # Read the persisted interval; fall back to the model default (6h)

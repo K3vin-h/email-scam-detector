@@ -37,6 +37,8 @@ SCHEDULER_LOCK_FILE_ENV = "SCAM_FILTER_SCHEDULER_LOCK_FILE"
 
 # Stable job ID so we can reschedule without restarting the scheduler
 SCAN_JOB_ID = "background_scan"
+SETTINGS_SYNC_JOB_ID = "settings_sync"
+SETTINGS_SYNC_INTERVAL_SECONDS = 60
 
 # Interval bounds — enforced here independently of model-layer validation
 # so a zero-interval bug can never cause a runaway scan loop
@@ -47,6 +49,7 @@ MAX_INTERVAL_HOURS = 168  # 1 week
 # so a permanently broken OAuth token does not spam logs endlessly
 MAX_CONSECUTIVE_FAILURES = 3
 _consecutive_failures = 0
+_current_interval_hours: Optional[int] = None
 
 
 def _scheduler_lock_path() -> Path:
@@ -108,6 +111,37 @@ def _clamp_hours(hours: int) -> int:
     return max(MIN_INTERVAL_HOURS, min(hours, MAX_INTERVAL_HOURS))
 
 
+def _load_scan_frequency_hours(default: int = 6) -> int:
+    """Read the persisted scan interval, falling back when the DB is unavailable."""
+    from django.db import OperationalError, ProgrammingError
+    from dashboard.models import ScanSettings
+
+    try:
+        settings_obj = ScanSettings.objects.get(pk=1)
+        return _clamp_hours(settings_obj.scan_frequency_hours)
+    except (ScanSettings.DoesNotExist, OperationalError, ProgrammingError):
+        return _clamp_hours(default)
+
+
+def _sync_scan_settings() -> None:
+    """Poll persisted settings so the scheduler owner sees cross-process changes."""
+    global _current_interval_hours
+
+    if _scheduler is None:
+        return
+
+    hours = _load_scan_frequency_hours(default=_current_interval_hours or 6)
+    if hours == _current_interval_hours:
+        return
+
+    logger.info(
+        "Detected scan frequency change: %s -> %d hour(s)",
+        _current_interval_hours,
+        hours,
+    )
+    reschedule_scan(hours)
+
+
 def _run_scan_job() -> None:
     """Job function called by APScheduler on each interval tick.
 
@@ -158,7 +192,7 @@ def start_scheduler(scan_frequency_hours: int) -> None:
         scan_frequency_hours: How often to run the background scan.
                               Clamped to [1, 168] hours regardless of input.
     """
-    global _scheduler
+    global _scheduler, _current_interval_hours
 
     hours = _clamp_hours(scan_frequency_hours)
 
@@ -179,9 +213,18 @@ def start_scheduler(scan_frequency_hours: int) -> None:
                 replace_existing=True,
                 max_instances=1,  # prevent scan overlap if one run is slow
             )
+            _scheduler.add_job(
+                _sync_scan_settings,
+                trigger=IntervalTrigger(seconds=SETTINGS_SYNC_INTERVAL_SECONDS),
+                id=SETTINGS_SYNC_JOB_ID,
+                replace_existing=True,
+                max_instances=1,
+            )
             _scheduler.start()
+            _current_interval_hours = hours
         except Exception:
             _scheduler = None
+            _current_interval_hours = None
             _release_process_lock()
             raise
 
@@ -205,16 +248,23 @@ def reschedule_scan(scan_frequency_hours: int) -> None:
     Args:
         scan_frequency_hours: New interval in hours.
     """
+    global _current_interval_hours
+
     hours = _clamp_hours(scan_frequency_hours)
 
     if _scheduler is None:
         logger.debug("Scheduler not running — reschedule is a no-op")
         return
 
+    if hours == _current_interval_hours:
+        logger.debug("Scan interval already set to %d hour(s)", hours)
+        return
+
     _scheduler.reschedule_job(
         SCAN_JOB_ID,
         trigger=IntervalTrigger(hours=hours),
     )
+    _current_interval_hours = hours
     logger.info(
         "Rescheduled background scan to every %d hour(s)",
         hours,
@@ -228,11 +278,12 @@ def get_scheduler() -> Optional[BackgroundScheduler]:
 
 def stop_scheduler(wait: bool = False) -> None:
     """Stop the active scheduler and release the process lock."""
-    global _scheduler
+    global _scheduler, _current_interval_hours
 
     try:
         if _scheduler is not None:
             _scheduler.shutdown(wait=wait)
     finally:
         _scheduler = None
+        _current_interval_hours = None
         _release_process_lock()
