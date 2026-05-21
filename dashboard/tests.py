@@ -735,8 +735,9 @@ class SchedulerStartTests(TestCase):
         except Exception:
             mod._scheduler = None
 
+    @patch("dashboard.scheduler._acquire_process_lock", return_value=True)
     @patch("dashboard.scheduler.BackgroundScheduler")
-    def test_start_scheduler_creates_and_starts_scheduler(self, MockScheduler):
+    def test_start_scheduler_creates_and_starts_scheduler(self, MockScheduler, _mock_lock):
         from dashboard.scheduler import start_scheduler, get_scheduler
 
         start_scheduler(6)
@@ -747,8 +748,9 @@ class SchedulerStartTests(TestCase):
         MockScheduler.return_value.start.assert_called_once()
         self.assertIsNotNone(get_scheduler())
 
+    @patch("dashboard.scheduler._acquire_process_lock", return_value=True)
     @patch("dashboard.scheduler.BackgroundScheduler")
-    def test_start_scheduler_idempotent(self, MockScheduler):
+    def test_start_scheduler_idempotent(self, MockScheduler, _mock_lock):
         from dashboard.scheduler import start_scheduler
 
         start_scheduler(6)
@@ -773,8 +775,9 @@ class SchedulerStartTests(TestCase):
         MockScheduler.assert_not_called()
         self.assertIsNone(get_scheduler())
 
+    @patch("dashboard.scheduler._acquire_process_lock", return_value=True)
     @patch("dashboard.scheduler.BackgroundScheduler")
-    def test_start_scheduler_uses_provided_interval(self, MockScheduler):
+    def test_start_scheduler_uses_provided_interval(self, MockScheduler, _mock_lock):
         from dashboard.scheduler import start_scheduler, SCAN_JOB_ID
 
         start_scheduler(8)
@@ -786,8 +789,9 @@ class SchedulerStartTests(TestCase):
         trigger = call_kwargs["trigger"]
         self.assertEqual(trigger.interval.total_seconds(), 8 * 3600)
 
+    @patch("dashboard.scheduler._acquire_process_lock", return_value=True)
     @patch("dashboard.scheduler.BackgroundScheduler")
-    def test_start_scheduler_adds_settings_sync_job(self, MockScheduler):
+    def test_start_scheduler_adds_settings_sync_job(self, MockScheduler, _mock_lock):
         from dashboard.scheduler import (
             SETTINGS_SYNC_INTERVAL_SECONDS,
             SETTINGS_SYNC_JOB_ID,
@@ -820,8 +824,9 @@ class RescheduleTests(TestCase):
         except Exception:
             mod._scheduler = None
 
+    @patch("dashboard.scheduler._acquire_process_lock", return_value=True)
     @patch("dashboard.scheduler.BackgroundScheduler")
-    def test_reschedule_updates_existing_job(self, MockScheduler):
+    def test_reschedule_updates_existing_job(self, MockScheduler, _mock_lock):
         from dashboard.scheduler import start_scheduler, reschedule_scan, SCAN_JOB_ID
 
         start_scheduler(6)
@@ -1035,10 +1040,14 @@ class ReportJobTests(TestCase):
     def test_run_report_job_generates_reports(self, mock_generate):
         from dashboard.scheduler import _run_report_job
 
+        ScanSettings.objects.update_or_create(
+            pk=1,
+            defaults={"notify_frequency": "weekly"},
+        )
         mock_generate.return_value = []
         _run_report_job()
 
-        mock_generate.assert_called_once()
+        mock_generate.assert_called_once_with(period="weekly")
 
     @patch("dashboard.email_report.send_summary_email")
     @patch("dashboard.reports.generate_summary_reports")
@@ -1060,6 +1069,31 @@ class ReportJobTests(TestCase):
 
         _run_report_job()
 
+        mock_send.assert_called_once_with(report, "user@example.com")
+
+    @patch("dashboard.email_report.send_summary_email")
+    @patch("dashboard.reports.generate_summary_reports")
+    def test_run_report_job_only_generates_matching_frequency(
+        self,
+        mock_generate,
+        mock_send,
+    ):
+        from dashboard.scheduler import _run_report_job
+
+        ScanSettings.objects.update_or_create(
+            pk=1,
+            defaults={
+                "notify_via_email": True,
+                "notify_email_address": "user@example.com",
+                "notify_frequency": "daily",
+            },
+        )
+        report = SummaryReport.objects.create(period="daily", total_scams=1, top_senders=[])
+        mock_generate.return_value = [report]
+
+        _run_report_job()
+
+        mock_generate.assert_called_once_with(period="daily")
         mock_send.assert_called_once_with(report, "user@example.com")
 
     @patch("dashboard.email_report.send_summary_email")
@@ -1098,6 +1132,7 @@ class ReportJobTests(TestCase):
 
         _run_report_job()
 
+        mock_generate.assert_called_once_with(period="daily")
         mock_send.assert_called_once_with(daily, "user@example.com")
 
     @patch("dashboard.reports.generate_summary_reports")
@@ -1111,8 +1146,9 @@ class ReportJobTests(TestCase):
         except RuntimeError:
             self.fail("_run_report_job() should not propagate exceptions")
 
+    @patch("dashboard.scheduler._acquire_process_lock", return_value=True)
     @patch("dashboard.scheduler.BackgroundScheduler")
-    def test_start_scheduler_adds_report_job(self, MockScheduler):
+    def test_start_scheduler_adds_report_job(self, MockScheduler, _mock_lock):
         import dashboard.scheduler as mod
         mod.stop_scheduler(wait=False)
         mod._scheduler = None
@@ -1128,8 +1164,9 @@ class ReportJobTests(TestCase):
 
         mod.stop_scheduler(wait=False)
 
+    @patch("dashboard.scheduler._acquire_process_lock", return_value=True)
     @patch("dashboard.scheduler.BackgroundScheduler")
-    def test_reschedule_report_job_updates_trigger(self, MockScheduler):
+    def test_reschedule_report_job_updates_trigger(self, MockScheduler, _mock_lock):
         import dashboard.scheduler as mod
         mod.stop_scheduler(wait=False)
         mod._scheduler = None
@@ -1148,3 +1185,36 @@ class ReportJobTests(TestCase):
         self.assertEqual(trigger.interval.total_seconds(), 24 * 3600)
 
         mod.stop_scheduler(wait=False)
+
+
+class GenerateReportCommandTests(TestCase):
+    """Tests for dashboard.management.commands.generate_report."""
+
+    @patch("dashboard.management.commands.generate_report.send_summary_email")
+    @patch("dashboard.management.commands.generate_report.generate_summary_reports")
+    def test_generate_report_only_generates_configured_frequency(
+        self,
+        mock_generate,
+        mock_send,
+    ):
+        from django.core.management import call_command
+
+        ScanSettings.objects.update_or_create(
+            pk=1,
+            defaults={
+                "notify_frequency": "monthly",
+                "notify_via_email": True,
+                "notify_email_address": "user@example.com",
+            },
+        )
+        report = SummaryReport.objects.create(
+            period="monthly",
+            total_scams=2,
+            top_senders=[],
+        )
+        mock_generate.return_value = [report]
+
+        call_command("generate_report")
+
+        mock_generate.assert_called_once_with(period="monthly")
+        mock_send.assert_called_once_with(report, "user@example.com")

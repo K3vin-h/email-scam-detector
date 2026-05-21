@@ -218,13 +218,17 @@ def _run_report_job() -> None:
     from dashboard.reports import generate_summary_reports
 
     try:
-        reports = generate_summary_reports()
         cfg = ScanSettings.load()
+        reports = generate_summary_reports(period=cfg.notify_frequency)
         if cfg.notify_via_email and cfg.notify_email_address:
-            target = next((r for r in reports if r.period == cfg.notify_frequency), None)
+            target = reports[0] if reports else None
             if target is not None:
                 send_summary_email(target, cfg.notify_email_address)
-        logger.info("Report generation job complete (%d reports)", len(reports))
+        logger.info(
+            "Report generation job complete (%d %s report)",
+            len(reports),
+            cfg.notify_frequency,
+        )
     except Exception as exc:
         logger.error("Report generation job failed: %s", exc, exc_info=True)
 

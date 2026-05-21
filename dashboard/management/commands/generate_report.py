@@ -26,13 +26,13 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options) -> None:
         dry_run: bool = options["dry_run"]
+        cfg = ScanSettings.load()
 
-        self.stdout.write("Generating summary reports…")
-        reports = generate_summary_reports()
+        self.stdout.write(f"Generating {cfg.notify_frequency} summary report…")
+        reports = generate_summary_reports(period=cfg.notify_frequency)
         self.stdout.write(self.style.SUCCESS(f"Generated {len(reports)} report(s)."))
 
-        cfg = ScanSettings.load()
-        target = next((r for r in reports if r.period == cfg.notify_frequency), None)
+        target = reports[0] if reports else None
 
         if target is None:
             self.stdout.write(f"No {cfg.notify_frequency!r} report was generated.")
