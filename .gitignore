@@ -11,6 +11,7 @@ credentials.json
 db.sqlite3
 venv/
 AGENTS.md
+CLAUDE.md
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/

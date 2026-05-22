@@ -383,6 +383,4 @@ venv/bin/python -m ml.train
 
 ## Security Notes
 
-The app stores secrets and Gmail tokens locally. Files such as `.env`, `token.json`, `credentials.json`, `db.sqlite3`, `ml/model.pt`, and `ml/vectorizer.json` should not be committed to git.
-
 The backend uses authenticated API endpoints, CSRF protection for unsafe requests, configured CORS origins, and JSON-based vectorizer loading to avoid unsafe pickle deserialization at runtime.
