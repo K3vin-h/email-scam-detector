@@ -4,6 +4,10 @@ import { ReportsPage } from '../../pages/ReportsPage.jsx';
 import { api } from '../../api/client.js';
 
 vi.mock('../../api/client.js');
+vi.mock('../../hooks/useAuth.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, isDemoMode: vi.fn(() => false) };
+});
 
 const mockReports = {
   count: 2,
@@ -93,5 +97,42 @@ describe('ReportsPage', () => {
     api.getReports.mockRejectedValueOnce(new Error('HTTP_500'));
     renderPage();
     await waitFor(() => expect(screen.getByText(/Failed to load reports/)).toBeInTheDocument());
+  });
+});
+
+describe('DemoEmailPreview', () => {
+  let isDemoModeMock;
+
+  beforeEach(async () => {
+    const authModule = await import('../../hooks/useAuth.js');
+    isDemoModeMock = authModule.isDemoMode;
+    isDemoModeMock.mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    isDemoModeMock.mockReturnValue(false);
+  });
+
+  it('renders Email Report Preview heading when in demo mode', async () => {
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByText(/Email Report Preview/i)).toBeInTheDocument()
+    );
+  });
+
+  it('renders sign-in prompt footer when in demo mode', async () => {
+    renderPage();
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Sign in with Gmail to enable real email reports/i)
+      ).toBeInTheDocument()
+    );
+  });
+
+  it('does not render DemoEmailPreview when not in demo mode', async () => {
+    isDemoModeMock.mockReturnValue(false);
+    renderPage();
+    await waitFor(() => expect(api.getReports).toHaveBeenCalled());
+    expect(screen.queryByText(/Email Report Preview/i)).not.toBeInTheDocument();
   });
 });

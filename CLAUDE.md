@@ -23,10 +23,13 @@ python -m ml.predict "text"  # Quick manual inference check
 
 ```bash
 python manage.py migrate
-python manage.py createsuperuser  # first local setup only
-python manage.py runserver        # Django API/admin on http://localhost:8000
-python manage.py scan_emails      # Run Gmail scan and persist/label results
+python manage.py createsuperuser        # first local setup only
+python manage.py runserver              # Django API/admin on http://localhost:8000; also starts background scheduler
+python manage.py scan_emails            # Run Gmail scan and persist/label results
 python manage.py scan_emails --dry-run  # Classify without DB writes or Gmail labels
+python manage.py generate_report        # Generate and email a summary report immediately
+python manage.py generate_report --dry-run  # Preview report email body in terminal without sending
+python manage.py run_scheduler          # Start background scheduler as a standalone process (production use)
 ```
 
 **Frontend:**
@@ -55,7 +58,7 @@ cd frontend && npm audit
 
 The project is a local macOS app that classifies Gmail emails as scam or legitimate using a PyTorch neural network trained from scratch. See `PLAN.md` for the full 10-phase roadmap.
 
-**Current state:** Phases 1–8 complete. The ML pipeline, Django backend, Gmail OAuth/fetch/labels integration, dashboard models, REST API, scan command, and React/Vite frontend are implemented. Security hardening is also in place: authenticated API defaults, DRF throttling, CSRF/CORS configuration, production security settings, safe scan error responses, and JSON-based vectorizer artifacts instead of pickle loading. Phases 9–10 (background scheduling and generated summary/report automation) remain future work.
+**Current state:** All 10 phases complete. The ML pipeline, Django backend, Gmail OAuth/fetch/labels integration, dashboard models, REST API, scan command, and React/Vite frontend are implemented. Security hardening is also in place: authenticated API defaults, DRF throttling, CSRF/CORS configuration, production security settings, safe scan error responses, and JSON-based vectorizer artifacts instead of pickle loading. Phase 9 added the APScheduler background scheduler with circuit breaker, inter-process file lock, and cross-process settings polling. Phase 10 added scheduled summary report generation, HTML/plain-text email delivery via Django's email backend, a `generate_report --dry-run` management command, and a demo-mode email preview card in the frontend.
 
 ### ML Pipeline (`ml/`)
 
@@ -77,9 +80,11 @@ download_data.py  →  emails.csv  →  train.py  →  model.pt + vectorizer.jso
 ### Web Layer
 
 - `core/` — Django project package (settings, urls, wsgi). DRF defaults require authentication, throttle requests, and render JSON only. Production security settings default to strict values when `DEBUG=False`.
-- `dashboard/` — Django app with `EmailRecord` (includes `reasons` JSONField), `ScanSettings`, and `SummaryReport`; authenticated DRF endpoints for emails, stats, settings, reports, scan triggering, daily stats (`DailyStatsView`), and top senders (`TopSendersView`); `scan_emails` management command.
+- `dashboard/` — Django app with `EmailRecord` (includes `reasons` JSONField), `ScanSettings`, and `SummaryReport`; authenticated DRF endpoints for emails, stats, settings, reports, scan triggering, daily stats (`DailyStatsView`), and top senders (`TopSendersView`); management commands: `scan_emails`, `generate_report`, `run_scheduler`.
 - `dashboard/scanner.py` — lists Gmail IDs with the scan-window query, bulk-skips already-known records, fetches/classifies only new messages, extracts and persists classification reasons, retries labels for known unlabeled scams, honors `dry_run`, and uses atomic `get_or_create` for scan inserts.
-- `dashboard/reports.py` — report generation logic for summary reports.
+- `dashboard/scheduler.py` — APScheduler `BackgroundScheduler` singleton; runs three jobs: `background_scan` (Gmail scan on configurable interval), `report_generation` (generates + emails report matching `notify_frequency`), and `settings_sync` (polls DB every 60 s for interval/frequency changes). Uses `fcntl` file lock to prevent duplicate ownership across worker processes. Circuit breaker pauses the scan job after 3 consecutive failures.
+- `dashboard/reports.py` — `generate_summary_reports(period=str|None)` creates one or all three period snapshots inside a `transaction.atomic()` block; `ensure_summary_reports()` backfills on first API call when scan data exists but no reports do.
+- `dashboard/email_report.py` — `build_text_body()` and `build_html_body()` format scam summary emails; `send_summary_email(report, recipient)` delivers via `EmailMultiAlternatives`. All sender fields are `html.escape()`-d; `FRONTEND_ORIGIN` is escaped in the HTML href; full recipient address never appears in logs.
 - `gmail/` — OAuth2 flow with session state + PKCE verifier protection (`auth.py`); email fetch with plain-text + HTML fallback and attachment handling (`fetch.py`); efficient ID-only listing for scans; label create/apply (`labels.py`); token saved to `token.json` (gitignored).
 - `frontend/` — React + Vite + Tailwind UI on port 5173, glassmorphism design system. Structure:
   - `pages/` — `LoginPage`, `DashboardPage`, `ReportsPage`, `SettingsPage`

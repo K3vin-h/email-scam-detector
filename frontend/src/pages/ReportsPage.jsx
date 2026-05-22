@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { ShieldAlert, TrendingUp, TrendingDown, Users, AlertTriangle, FlaskConical, X } from 'lucide-react';
+import { ShieldAlert, TrendingUp, TrendingDown, Users, AlertTriangle, FlaskConical, X, Mail, Lock } from 'lucide-react';
 import { useReports } from '../hooks/useReports.js';
 import { useStats } from '../hooks/useStats.js';
 import { useDailyStats } from '../hooks/useDailyStats.js';
 import { useSenderStats } from '../hooks/useSenderStats.js';
 import { clearDemoMode, isDemoMode } from '../hooks/useAuth.js';
+import { DEMO_REPORTS } from '../demo/mockData.js';
 import { NavBar } from '../components/NavBar.jsx';
 import { MobileTabBar } from '../components/MobileTabBar.jsx';
 import { PageShell } from '../components/PageShell.jsx';
@@ -145,6 +146,87 @@ function DetectionChart({ data, loading }) {
   );
 }
 
+// Use the weekly demo report as the email preview sample
+const DEMO_EMAIL_REPORT = DEMO_REPORTS.find((r) => r.period === 'weekly') ?? DEMO_REPORTS[0];
+
+function DemoEmailPreview() {
+  const report = DEMO_EMAIL_REPORT;
+  const generated = new Date(report.generated_at).toLocaleDateString('en-US', {
+    year: 'numeric', month: 'long', day: 'numeric',
+  });
+
+  return (
+    <GlassCard className="overflow-hidden">
+      <div className="px-4 py-3 border-b border-slate-200/70 dark:border-slate-700/60 flex items-center gap-3">
+        <div className="w-8 h-8 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
+          <Mail size={15} className="text-violet-600 dark:text-violet-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100 tracking-tight">
+            Email Report Preview
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Sample of what your weekly report email looks like
+          </p>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2.5 py-1 rounded-full border border-amber-200/60 dark:border-amber-700/30">
+          <Lock size={10} strokeWidth={2.5} />
+          Demo only
+        </div>
+      </div>
+
+      {/* Simulated email card */}
+      <div className="p-4 sm:p-5">
+        <div className="rounded-xl overflow-hidden border border-slate-200/80 dark:border-slate-700/60 shadow-sm">
+          {/* Email header */}
+          <div className="bg-violet-600 px-6 py-5">
+            <div className="text-[10px] font-bold tracking-widest uppercase text-violet-300 mb-1">
+              Scam Filter Report
+            </div>
+            <div className="text-xl font-bold text-white">Weekly Summary</div>
+            <div className="text-xs text-violet-200 mt-1">{generated}</div>
+          </div>
+
+          {/* Email body */}
+          <div className="bg-white dark:bg-slate-900 px-6 py-5">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+              Scams detected
+            </div>
+            <div className="text-5xl font-extrabold text-rose-500 leading-none">
+              {report.total_scams}
+            </div>
+
+            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-5 mb-2">
+              Top Senders
+            </h3>
+            <div className="divide-y divide-slate-100 dark:divide-slate-800 rounded-lg border border-slate-200/70 dark:border-slate-700/60 overflow-hidden text-sm">
+              {report.top_senders.map((entry, i) => (
+                <div key={i} className="flex items-center justify-between px-3 py-2">
+                  <code className="text-xs text-slate-600 dark:text-slate-400 truncate max-w-[75%]">
+                    {entry.sender}
+                  </code>
+                  <span className="font-bold text-rose-500 tabular-nums">{entry.count}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800">
+              <div className="inline-block bg-violet-600 text-white text-xs font-bold px-4 py-2 rounded-lg opacity-60 cursor-not-allowed">
+                View Dashboard →
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <p className="mt-3 text-center text-xs text-slate-400 dark:text-slate-500 flex items-center justify-center gap-1.5">
+          <Lock size={10} strokeWidth={2} />
+          Sign in with Gmail to enable real email reports in Settings
+        </p>
+      </div>
+    </GlassCard>
+  );
+}
+
 export function ReportsPage() {
   const [period, setPeriod] = useState('');
   const { reports, loading, error } = useReports(period);
@@ -263,6 +345,8 @@ export function ReportsPage() {
             </div>
           )}
         </GlassCard>
+
+        {isDemoMode() && <DemoEmailPreview />}
 
       </main>
       <MobileTabBar />
