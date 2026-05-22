@@ -183,21 +183,51 @@ For local personal-project use, starting the normal Django server is enough. The
 python manage.py runserver
 ```
 
-While the backend is running, the scheduler:
+While the backend is running, the scheduler runs three background jobs:
 
-- scans Gmail on the `scan_frequency_hours` interval saved in Settings
-- generates the configured summary report period automatically
-- sends the report email when email reports are enabled and a recipient address is saved
+- **Scan job** — scans Gmail on the `scan_frequency_hours` interval saved in Settings
+- **Report job** — generates the configured summary report and emails it when email reports are enabled
+- **Settings sync job** — polls `ScanSettings` every 60 seconds so changes to `scan_frequency_hours` and `notify_frequency` made from the web app are picked up without restarting the scheduler
 
-You only need `python manage.py generate_report` when you want to send a report immediately for testing.
+If the scan job fails three times in a row (for example, because the Gmail token has expired), the scheduler pauses it and logs a critical alert. Fixing the token and restarting the server resumes scanning.
 
-For production deployments, either run the scheduler as a single dedicated process or explicitly opt a single server process into scheduler ownership. The scheduler process polls `ScanSettings`, so changes to `scan_frequency_hours` and `notify_frequency` made from the web app are picked up without restarting the scheduler:
+For production deployments, either run the scheduler as a single dedicated process or explicitly opt a single server process into scheduler ownership:
 
 ```bash
 python manage.py run_scheduler
 ```
 
 Other production processes do not auto-start it unless `SCAM_FILTER_AUTO_START_SCHEDULER=true` is set.
+
+#### Email Reports
+
+When `notify_via_email` is enabled and `notify_email_address` is set in Settings, the report job sends a formatted HTML email summary at the end of each report period.
+
+To configure email delivery, add the following to your `.env` file:
+
+```
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER=your-address@gmail.com
+EMAIL_HOST_PASSWORD=your-16-char-app-password
+EMAIL_FROM=your-address@gmail.com
+```
+
+The default `EMAIL_BACKEND` is the console backend, which prints emails to the terminal instead of sending them. This is safe for development and does not require any SMTP configuration.
+
+To test email sending immediately without waiting for the scheduler, use the management command:
+
+```bash
+python manage.py generate_report
+```
+
+To preview the email body in the terminal without sending anything:
+
+```bash
+python manage.py generate_report --dry-run
+```
 
 #### Summary Report
 
@@ -261,6 +291,7 @@ The reports page consists of:
 6. Daily, weekly, and monthly report filters
 7. Report cards showing scam totals and top senders
 8. Dark-mode friendly chart hover tooltips and report cards
+9. A demo email preview card showing what the weekly report email looks like (visible in demo mode only)
 
 #### Settings Page
 The settings page consists of:
