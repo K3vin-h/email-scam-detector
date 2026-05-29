@@ -6,14 +6,14 @@ The machine learning model is a neural network created using the PyTorch framewo
 
 ### Dataset Preparation
 
-The email features, meaning the email content, are converted into [TF-IDF](#tf-idf-term-frequency-inverse-document-frequency) numerical representations. They are then converted into tensors.
+The email features, meaning the email content, are converted into [TF-IDF](#tf-idf-term-frequency-inverse-document-frequency) numerical representations. They are then converted into tensors. We use TF-IDF over word count is because getting the total number of word count does not give much information about the email. Scam emails tend to have certain words and TF-IDF weights each word differently; scam words tend to have higher weights.
 
 The emails are given a label depending on whether they are scams or not:
 
 - `1`: scam
 - `0`: legitimate
 
-The labels are 1D arrays, while the email features are 2D arrays. Because of this, an extra dimension is added to the labels to match the email features array.
+The labels are 1D arrays, while the email features are 2D arrays (number of emails, number of words/features). Because of this, an extra dimension is added to the labels to match the email features array.
 
 <details>
 <summary><strong>TF-IDF (Term Frequency-Inverse Document Frequency)</strong></summary>
@@ -59,7 +59,7 @@ ReLU is an activation function applied after each layer. It turns any negative n
 
 $$ReLU(x) = \max(0,\ x)$$
 
-For any input below 0, the output is 0. For any input above 0, the output equals the input.
+For any input below 0, the output is 0. For any input above 0, the output equals the input. This allows the model to learn non-linear patterns since all negative numbers are turned into 0.
 
 ![Graph showing ReLU output: flat at 0 for all negative inputs, then rising linearly for positive inputs](image.png)
 
@@ -71,12 +71,12 @@ For any input below 0, the output is 0. For any input above 0, the output equals
 
 The hyperparameters are set to the following values:
 
-- Epochs: 10
-- Batch size: 64
-- Learning rate: 0.001
-- Max features: 10,000, which is how many words the model will track
+- Epochs: 10 (number of times the model sees the entire dataset)
+- Batch size: 64 (number of emails the model processes at once)
+- Learning rate: 0.001 (how much the model adjusts the weights each time)
+- Max features: 10,000 (how many words the model will track)
 
-The dataset is split into 3 sets: train, validation, and test. This prevents the model from memorizing the dataset.
+The dataset is split into 3 sets: train, validation, and test. This prevents the model from memorizing the dataset. The train set is used to train the model, the validation set is used to evaluate the model, and the test set is used to test the model and see its accuracy.
 
 The loss function is Binary Cross Entropy Loss. This measures the difference between the predicted probability and the actual label. A loss of 0 means the model is perfect. A higher loss means the model is wrong. Then backpropagation occurs, where weights are adjusted to reduce loss.
 
