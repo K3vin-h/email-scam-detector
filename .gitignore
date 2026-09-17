@@ -2,6 +2,8 @@ data/
 ml/model.pt
 ml/vectorizer.pkl
 ml/vectorizer.json
+ml/training_history.json
+ml/training_history.png
 __pycache__/
 *.pyc
 .DS_Store
@@ -10,8 +12,11 @@ token.json
 credentials.json
 db.sqlite3
 venv/
+.venv/
 AGENTS.md
 CLAUDE.md
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+docs/interview-prep/
+docs/superpowers/plans/

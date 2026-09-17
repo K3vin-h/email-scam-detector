@@ -12,6 +12,8 @@ What this script does step-by-step:
   6. After each epoch, check performance on the validation set
   7. Save the best model and the vectorizer to disk
 """
+
+import json
 from pathlib import Path
 
 import numpy as np
@@ -32,10 +34,10 @@ ML_DIR = Path("ml")
 # ── Hyperparameters ───────────────────────────────────────────────────────────
 # These are settings the programmer chooses (not learned by the network).
 # They control HOW training happens, not WHAT the network learns.
-EPOCHS = 10           # How many full passes through the training data
-BATCH_SIZE = 64       # How many emails to process together before updating weights
+EPOCHS = 10  # How many full passes through the training data
+BATCH_SIZE = 64  # How many emails to process together before updating weights
 LEARNING_RATE = 1e-3  # How large a step to take when adjusting weights
-MAX_FEATURES = 10_000 # Maximum number of words to track in the TF-IDF vocabulary
+MAX_FEATURES = 10_000  # Maximum number of words to track in the TF-IDF vocabulary
 
 
 def load_and_split(csv_path: Path):
@@ -53,8 +55,8 @@ def load_and_split(csv_path: Path):
     df = pd.read_csv(csv_path).dropna(subset=["text"])
     df = df[df["text"].str.strip() != ""]
 
-    X = df["text"].tolist() # email features (content)
-    y = df["label"].values # email labels (1 for scam and 0 for not scam)
+    X = df["text"].tolist()  # email features (content)
+    y = df["label"].values  # email labels (1 for scam and 0 for not scam)
 
     # stratify=y ensures each split has the same spam/legit ratio as the full dataset.
     # random_state=42 makes the split reproducible — same split every run.
@@ -164,7 +166,9 @@ def main():
     # DataLoader wraps a Dataset and handles batching + shuffling automatically.
     # shuffle=True on training ensures the model sees data in a different order
     # each epoch, preventing it from learning spurious ordering patterns.
-    train_loader = DataLoader(SpamDataset(X_train, y_train), batch_size=BATCH_SIZE, shuffle=True)
+    train_loader = DataLoader(
+        SpamDataset(X_train, y_train), batch_size=BATCH_SIZE, shuffle=True
+    )
     val_loader = DataLoader(SpamDataset(X_val, y_val), batch_size=BATCH_SIZE)
 
     # ── Model setup ───────────────────────────────────────────────────────────
@@ -180,16 +184,31 @@ def main():
 
     # ── Training loop ─────────────────────────────────────────────────────────
     print(f"\nTraining for {EPOCHS} epochs  (batch size={BATCH_SIZE})...")
-    print(f"{'Epoch':>5}  {'Train Loss':>10}  {'Train Acc':>9}  {'Val Loss':>8}  {'Val Acc':>7}")
+    print(
+        f"{'Epoch':>5}  {'Train Loss':>10}  {'Train Acc':>9}  {'Val Loss':>8}  {'Val Acc':>7}"
+    )
     print("-" * 50)
 
     best_val_loss = float("inf")
+    history = []
 
     for epoch in range(1, EPOCHS + 1):
         train_loss, train_acc = run_epoch(model, train_loader, criterion, optimizer)
         val_loss, val_acc = evaluate(model, val_loader, criterion)
 
-        print(f"{epoch:>5}  {train_loss:>10.4f}  {train_acc:>8.1%}  {val_loss:>8.4f}  {val_acc:>6.1%}")
+        print(
+            f"{epoch:>5}  {train_loss:>10.4f}  {train_acc:>8.1%}  {val_loss:>8.4f}  {val_acc:>6.1%}"
+        )
+
+        history.append(
+            {
+                "epoch": epoch,
+                "train_loss": train_loss,
+                "train_acc": train_acc,
+                "val_loss": val_loss,
+                "val_acc": val_acc,
+            }
+        )
 
         # Save model only when validation loss improves — this gives us the
         # best checkpoint, not just the final state at epoch 10.
@@ -202,7 +221,12 @@ def main():
     # Save the fitted vectorizer so predict.py uses the exact same vocabulary.
     save_vectorizer(vectorizer, ML_DIR / "vectorizer.json")
     print("Vectorizer saved to ml/vectorizer.json")
+
+    # Save per-epoch metrics so plot_history.py can chart accuracy/loss vs. epoch.
+    (ML_DIR / "training_history.json").write_text(json.dumps(history))
+    print("Training history saved to ml/training_history.json")
     print("\nRun `python -m ml.evaluate` to see test-set metrics.")
+    print("Run `python -m ml.plot_history` to plot accuracy/loss vs. epoch.")
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ scikit-learn>=1.8.0,<2.0
 pandas>=3.0.0,<4.0
 numpy>=2.4.0,<3.0
 requests>=2.33.0,<3.0
+matplotlib>=3.10.0,<4.0
 
 # Web
 django>=6.0.0,<6.1
